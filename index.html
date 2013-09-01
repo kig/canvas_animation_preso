@@ -1,0 +1,2035 @@
+<html>
+<head>
+  <title>HTML5 Canvas Animation</title>
+  <meta http-equiv="X-UA-Compatible" content="chrome=1">
+  <script type="text/javascript" src="cake.js"></script>
+  <script type="text/javascript" src="support.js"></script>
+  <script type="text/javascript">
+
+    UseCSSTransforms = false;
+    ShowPivots = false;
+
+    M = {
+      rotation : function(rotation) {
+        return CanvasSupport.tRotationMatrix(rotation)
+      },
+
+      scaling : function(x, y) {
+        return CanvasSupport.tScalingMatrix(x, y)
+      },
+
+      translation : function(x, y) {
+        return CanvasSupport.tTranslationMatrix(x, y)
+      }
+    }
+
+    V = {
+      rotate : function(v, rotation) {
+        return V.multiply(v, M.rotation(rotation))
+      },
+
+      add : function(v, u) {
+        return [u[0] + v[0], u[1] + v[1]]
+      },
+
+      multiply : function(v, matrix) {
+        return CanvasSupport.tMatrixMultiplyPoint(matrix, v[0], v[1])
+      }
+    }
+
+
+    ERectangle = Klass(ElementNode, {
+      initialize : function(w,h, config) {
+        var d = E('div');
+        d.style.width = w+'px';
+        d.style.height = h+'px';
+        d.style.backgroundColor = config.fill;
+        ElementNode.initialize.call(this, d, config);
+        if (config.centered) this.align = this.valign = 'center';
+      }
+    });
+
+    if (!UseCSSTransforms)
+      ERectangle = Rectangle;
+
+    Explosion = Klass(CanvasNode, {
+      catchMouse : false,
+      cursor : 'default',
+      
+      circleGradient : new Gradient({
+        type : 'radial',
+        endRadius : 15,
+        colorStops : [
+          [ 0.0, "rgba(255,255,255,1)" ],
+          [ 0.1, "rgba(255,205,80,1)" ],
+          [ 0.25, "rgba(200,60,20,0.2)" ],
+          [ 1, "rgba(10,10,40,0)" ]
+        ]
+      }),
+      
+      initialize : function(size, config) {
+        CanvasNode.initialize.call(this, config)
+        var main = new Circle(15)
+        main.fill = this.circleGradient
+//         main.compositeOperation = 'normal'
+        this.zIndex = 10
+        this.main = main
+        this.append(main)
+        this.size = size
+        this.addFrameListener(this.blowup)
+        this.after(500, this.removeSelf)
+      },
+
+      blowup : function(t, dt) {
+        if (this.startTime == null)
+          this.startTime = t
+        var elapsed = Math.min(500, t - this.startTime)
+        var fac = 0.48 * 0.003 * Math.PI
+        this.main.scale = 1 + this.size * Math.tan(elapsed * fac)
+      }
+    })
+
+
+    EndCredits = Klass(CanvasNode, {
+      initialize : function() {
+        CanvasNode.initialize.call(this);
+        var txt = E('div', 'The End');
+        txt.className = 'theEnd';
+        var e = new ElementNode(txt);
+        e.align = e.valign = 'center';
+        this.append(e);
+        this.x = 512-1000;
+        this.y = 384-1000;
+        this.addFrameListener(this.spin);
+      },
+
+      spin: function(t,dt) {
+        if (this.startTime == null)
+          this.startTime = t;
+        var elapsed = t - this.startTime;
+        if (elapsed >= 1000) {
+          this.x = 502 - 0.06*(500-Math.max(0, 1500-elapsed));
+          this.y = 334 + 0.01*(500-Math.max(0, 1500-elapsed));
+          this.rotation = -0.1;
+          this.scale = 1 + (0.0001*Math.max(0, 1500-elapsed)*Math.abs(Math.sin((elapsed-1000)/100)));
+        } else {
+          var angle = -(1000-elapsed) / 500;
+          var r = 2*(1000-elapsed);
+          this.rotation = -0.1 + angle;
+          this.x = 502 + Math.cos(angle)*r;
+          this.y = 334 + Math.sin(angle)*r;
+          this.scale = 1 + r/800;
+        }
+      }
+    });
+
+
+    Paperdoll = Klass(CanvasNode, {
+      prefix : null,
+      walkSpeed : 200,
+      runSpeed : 400,
+      
+      initialize : function() {
+        CanvasNode.initialize.call(this);
+        this.loadParts(this.prefix);
+      },
+
+      loadPivoted : function(filename, pivotX, pivotY, x, y) {
+        var pivot = new CanvasNode({x:x, y:y});
+        var sprite;
+        if (UseCSSTransforms) {
+          var img = new Image();
+          img.src = this.prefix+filename;
+          var sprite = new ElementNode(img);
+        } else {
+          sprite = ImageNode.load(this.prefix + filename);
+        }
+        sprite.x = -pivotX;
+        sprite.y = -pivotY;
+        pivot.sprite = sprite;
+        pivot.append(sprite);
+        if (ShowPivots) {
+          var c = new CanvasNode();
+          c.append(new ERectangle(8, 1, {fill: 'rgb(100,255,192)', centered: true}));
+          c.append(new ERectangle(1, 8, {fill: 'rgb(100,255,192)', centered: true}));
+          pivot.append(c);
+        }
+        return pivot;
+      },
+
+      swapPart : function(partName, newPart) {
+        var p = this[partName].parent;
+        this[partName].removeSelf();
+        this[partName] = newPart;
+        p.append(newPart);
+      },
+      
+      initWalk : function() {
+        this.origLeftFootX = this.leftFoot.x;
+        this.origLeftFootY = this.leftFoot.y;
+        this.origRightFootX = this.rightFoot.x;
+        this.origRightFootY = this.rightFoot.y;
+        this.footMid = this.origLeftFootX + (this.origRightFootX-this.origLeftFootX) / 2;
+      },
+      
+      walkLeft : function() {
+        this.stopNow();
+        this.initWalk();
+        this.addFrameListener(this.leftWalkLoop);
+      },
+
+      walkRight : function() {
+        this.stopNow();
+        this.initWalk();
+        this.addFrameListener(this.rightWalkLoop);
+      },
+
+      leftWalkLoop : function(t) {
+        this.leftFoot.x = this.origLeftFootX + 0.8*(1 + Math.sin(t/120)) * (this.footMid-this.origLeftFootX);
+        this.rightFoot.x = this.origRightFootX + 0.8*(1 + Math.sin(t/120)) * (this.footMid-this.origRightFootX);
+        this.rightFoot.rotation = 0.2*Math.sin(t/120+1.25);
+        this.leftFoot.rotation = 0.2*Math.sin(Math.PI+t/120+1.25);
+        this.rightArm.rotation = 0.1+0.5*Math.sin(Math.PI+t/120+1.25);
+        this.leftArm.rotation = 0.1+0.5*Math.sin(t/120+1.25);
+        this.leftFoot.y = Math.min(0, Math.cos(t/120)) * 10 + this.origLeftFootY;
+        this.rightFoot.y = Math.min(0, Math.cos(Math.PI+t/120)) * 10 + this.origRightFootY;
+      },
+
+      rightWalkLoop : function(t) {
+        this.leftFoot.x = this.origLeftFootX + 0.8*(1 + Math.sin(t/120)) * (this.footMid-this.origLeftFootX);
+        this.rightFoot.x = this.origRightFootX + 0.8*(1 + Math.sin(t/120)) * (this.footMid-this.origRightFootX);
+        this.rightFoot.rotation = 0.2*Math.sin(t/120+1.25);
+        this.leftFoot.rotation = 0.2*Math.sin(Math.PI+t/120+1.25);
+        this.rightArm.rotation = -0.1+0.5*Math.sin(Math.PI+t/120+1.25);
+        this.leftArm.rotation = -0.1+0.5*Math.sin(t/120+1.25);
+        this.leftFoot.y = Math.min(0, Math.cos(Math.PI+t/120)) * 10 + this.origLeftFootY;
+        this.rightFoot.y = Math.min(0, Math.cos(t/120)) * 10 + this.origRightFootY;
+      },
+      
+      runLeft : function() {
+        this.stopNow();
+        this.initWalk();
+        this.addFrameListener(this.leftRunLoop);
+      },
+
+      runRight : function() {
+        this.stopNow();
+        this.initWalk();
+        this.addFrameListener(this.rightRunLoop);
+      },
+
+      leftRunLoop : function(t) {
+        this.leftFoot.x = this.origLeftFootX + 0.8*(1 + Math.sin(t/60)) * (this.footMid-this.origLeftFootX);
+        this.rightFoot.x = this.origRightFootX + 0.8*(1 + Math.sin(t/60)) * (this.footMid-this.origRightFootX);
+        this.rightFoot.rotation = 0.4*Math.sin(t/60+1.1);
+        this.leftFoot.rotation = 0.4*Math.sin(Math.PI+t/60+1.1);
+        this.rightArm.rotation = 0.3+1.0*Math.sin(Math.PI+t/60+1.1);
+        this.leftArm.rotation = 0.3+1.0*Math.sin(t/60+1.1);
+        this.leftFoot.y = Math.min(0, Math.cos(t/60)) * 10 + this.origLeftFootY;
+        this.rightFoot.y = Math.min(0, Math.cos(Math.PI+t/60)) * 10 + this.origRightFootY;
+      },
+
+      rightRunLoop : function(t) {
+        this.leftFoot.x = this.origLeftFootX + 0.8*(1 + Math.sin(t/60)) * (this.footMid-this.origLeftFootX);
+        this.rightFoot.x = this.origRightFootX + 0.8*(1 + Math.sin(t/60)) * (this.footMid-this.origRightFootX);
+        this.rightFoot.rotation = 0.4*Math.sin(t/60+1.1);
+        this.leftFoot.rotation = 0.4*Math.sin(Math.PI+t/60+1.1);
+        this.rightArm.rotation = -0.3+1.0*Math.sin(Math.PI+t/60+1.1);
+        this.leftArm.rotation = -0.3+1.0*Math.sin(t/60+1.1);
+        this.leftFoot.y = Math.min(0, Math.cos(Math.PI+t/60)) * 10 + this.origLeftFootY;
+        this.rightFoot.y = Math.min(0, Math.cos(t/60)) * 10 + this.origRightFootY;
+      },
+      
+      
+      stopNow : function() {
+        this.removeFrameListener(this.leftWalkLoop);
+        this.removeFrameListener(this.rightWalkLoop);
+        this.removeFrameListener(this.leftRunLoop);
+        this.removeFrameListener(this.rightRunLoop);
+        this.removeFrameListener(this.runMoveRight);
+        this.removeFrameListener(this.runMoveLeft);
+        this.runningLeft = false;
+        this.runningRight = false;
+        if (this.origLeftFootX != null) {
+          this.leftFoot.x = this.origLeftFootX;
+          this.leftFoot.y = this.origLeftFootY;
+        }
+        if (this.origRightFootX != null) {
+          this.rightFoot.x = this.origRightFootX;
+          this.rightFoot.y = this.origRightFootY;
+        }
+        this.rightFoot.rotation = this.leftFoot.rotation = 0;
+        this.rightArm.rotation = this.leftArm.rotation = 0;
+      },
+
+      stop : function() {
+        this.at(this.lastAction, this.stopNow);
+        return this;
+      },
+
+      doWave : function(time) {
+        if (typeof time != "number") time = 0;
+        var wavetimeline = new Timeline();
+        wavetimeline.appendKeyframe(time, {rotation: 0});
+        wavetimeline.appendKeyframe(400, {rotation: -0.8*Math.PI});
+        wavetimeline.appendKeyframe(400, {rotation: -0.5*Math.PI});
+        wavetimeline.appendKeyframe(400, {rotation: -0.8*Math.PI});
+        wavetimeline.appendKeyframe(400, {rotation: -0.5*Math.PI});
+        wavetimeline.appendKeyframe(400, {rotation: -0.8*Math.PI});
+        wavetimeline.appendKeyframe(400, {rotation: 0});
+        this.rightArm.addTimeline(wavetimeline);
+      },
+
+      wave : function() {
+        this.doWave(this.lastAction);
+//         this.appendKeyframe(2400, {});
+        return this;
+      },
+
+      walkTo : function(x, y, id) {
+        this.appendKeyframe(1, {x: this.x, y: this.y})
+        var dx = x-this.x;
+        var dy = y-this.y;
+        var ds = Math.sqrt(dx*dx+dy*dy);
+        var walkFunc = dx > 0 ? this.walkRight : this.walkLeft;
+        this.at(this.lastAction, walkFunc.bind(this));
+        this.appendKeyframe((ds / this.walkSpeed) * 1000, {x: x, y: y});
+        this.stop();
+        return this;
+      },
+
+      startRunningRight : function() {
+        this.at(this.lastAction, function() {
+          this.runRight();
+          this.addFrameListener(this.runMoveRight);
+        });
+        return this;
+      },
+
+      startRunningLeft : function() {
+        this.at(this.lastAction, function() {
+          this.runLeft();
+          this.addFrameListener(this.runMoveLeft);
+        });
+        return this;
+      },
+
+      startRunningAround : function() {
+        this.at(this.lastAction, function() {
+          this.runLeft();
+          this.addFrameListener(this.runMoveLeft);
+          this.addFrameListener(this.runAround);
+        });
+        return this;
+      },
+
+      stopRunningAround : function() {
+        this.at(this.lastAction, function() {
+          this.removeFrameListener(this.runAround);
+          this.stopNow();
+        });
+        return this;
+      },
+
+      runAround : function(t,dt) {
+        if (this.x < 100 && !this.runningRight) {
+          this.runningLeft = false;
+          this.runRight();
+          this.addFrameListener(this.runMoveRight);
+          this.runningRight = true;
+        } else if (this.x > 900 && !this.runningLeft) {
+          this.runningRight = false;
+          this.runLeft();
+          this.addFrameListener(this.runMoveLeft);
+          this.runningLeft = true;
+        }
+      },
+
+      runMoveLeft: function(t,dt) {
+        this.x -= this.runSpeed * (dt/1000);
+      },
+
+      runMoveRight: function(t,dt) {
+        this.x += this.runSpeed * (dt/1000);
+      },
+
+      say : function(text, id) {
+        var delay = Math.max(3, text.length / 20)*1000;
+        this.at(this.lastAction, function() {
+          var t = E('div', text, {className: 'speechbubble'});
+          var tn = new ElementNode(t, {x:0, y:-200, align: 'center', valign: 'bottom'});
+          if (this.speechbubble) {
+            tn.scale = this.speechbubble.scale;
+          }
+          this.speechbubble = tn;
+          this.torso.append(tn);
+          tn.after(delay, tn.removeSelf);
+        });
+        this.appendKeyframe(delay, {});
+        return this;
+      },
+
+      sayBg : function(text, id) {
+        var delay = Math.max(3, text.length / 20)*1000;
+        this.at(this.lastAction, function() {
+          var t = E('div', text, {className: 'speechbubble'});
+          var tn = new ElementNode(t, {x:0, y:-200, align: 'center', valign: 'bottom'});
+          if (this.speechbubble) {
+            tn.scale = this.speechbubble.scale;
+          }
+          this.speechbubble = tn;
+          this.torso.append(tn);
+          tn.after(delay, tn.removeSelf);
+        });
+        return this;
+      },
+
+
+      stopCanvas : function() {
+        this.at(this.lastAction, function() {
+          this.root.stop();
+        });
+        return this;
+      },
+      
+      wait : function(delay) {
+        this.appendKeyframe(delay, {});
+        return this;
+      },
+
+      waitFor : function(id) {
+        return this;
+      }
+      
+    });
+
+
+    Tomte = Klass(Paperdoll, {
+      prefix : "tomte_sprite/",
+
+      initialize : function() {
+        Paperdoll.initialize.call(this);
+        this.addEventListener("click", this.doWave.bind(this), false);
+//         this.makeDraggable();
+//         this.partyOn();
+      },
+
+      walkLeft : function() {
+        Paperdoll.walkLeft.call(this);
+        this.swapPart('rightFoot', this.leftRightFoot);
+        this.swapPart('leftFoot', this.normalLeftFoot);
+        this.rightArm.zIndex = 1.5;
+        this.leftArm.zIndex = -1;
+        this.leftArm.x = -12;
+        this.rightArm.x = 12;
+        this.rightFoot.zIndex = -1;
+        this.leftFoot.zIndex = -1.5;
+      },
+      
+      walkRight : function() {
+        Paperdoll.walkRight.call(this);
+        this.swapPart('rightFoot', this.normalRightFoot);
+        this.swapPart('leftFoot', this.rightLeftFoot);
+        this.rightArm.zIndex = -1;
+        this.leftArm.zIndex = 1.5;
+        this.leftArm.x = -12;
+        this.rightArm.x = 12;
+        this.rightFoot.zIndex = -1.5;
+        this.leftFoot.zIndex = -1;
+      },
+
+      runLeft : function() {
+        Paperdoll.runLeft.call(this);
+        this.swapPart('rightFoot', this.leftRightFoot);
+        this.swapPart('leftFoot', this.normalLeftFoot);
+        this.rightArm.zIndex = 1.5;
+        this.leftArm.zIndex = -1;
+        this.leftArm.x = -12;
+        this.rightArm.x = 12;
+        this.rightFoot.zIndex = -1;
+        this.leftFoot.zIndex = -1.5;
+      },
+      
+      runRight : function() {
+        Paperdoll.runRight.call(this);
+        this.swapPart('rightFoot', this.normalRightFoot);
+        this.swapPart('leftFoot', this.rightLeftFoot);
+        this.rightArm.zIndex = -1;
+        this.leftArm.zIndex = 1.5;
+        this.leftArm.x = -12;
+        this.rightArm.x = 12;
+        this.rightFoot.zIndex = -1.5;
+        this.leftFoot.zIndex = -1;
+      },
+      
+      stopNow : function() {
+        this.swapPart('rightFoot', this.normalRightFoot);
+        this.swapPart('leftFoot', this.normalLeftFoot);
+        this.leftArm.x = -17;
+        this.rightArm.x = 17;
+        if (this.rightArm.zIndex == 1.5) this.rightArm.zIndex = -1;
+        if (this.leftArm.zIndex == 1.5) this.leftArm.zIndex = -1;
+        Paperdoll.stopNow.call(this);
+      },
+
+      partyOn : function() {
+        this.head.addFrameListener(function(t) { this.rotation = 0.25*Math.cos(t/100) });
+        this.mouth.rotation = Math.PI;
+        this.rightArm.zIndex = 1;
+        this.leftArm.addFrameListener(function(t) { this.rotation = -t/500 % Math.PI*2 });
+        this.rightArm.addFrameListener(function(t) { this.rotation = Math.PI - t/500 % Math.PI*2 });
+        this.leftFoot.addFrameListener(function(t) { this.y = 47 + 5*Math.sin(t/100) });
+        this.rightFoot.addFrameListener(function(t) { this.y = 47 + 5*Math.sin(-t/100) });
+      },
+
+      loadParts : function() {
+        this.torso = this.loadPivoted("torso_front.png", 52, 45, 0, 0);
+        this.head = this.loadPivoted("head.png", 22, 34, 0, -45);
+        this.hat = this.loadPivoted("hat.png", 22, 80, 0, -17);
+        this.hat.zIndex = 1;
+
+        this.magicWand = this.loadPivoted("magicwand.png", 12, 45, 0, 0);
+
+        this.eyes = this.loadPivoted("eyes.png", 18, 1, -2, -16);
+        this.normalEyes = this.eyes;
+        this.evilEyes = this.loadPivoted("evil_eyes.png", 18, 1, -1, -16);
+
+        this.normalMouth = this.loadPivoted("mouth.png", 6, 3, 0, -2);
+        this.angryMouth = this.loadPivoted("angry_mouth.png", 6, 4, 0, -2);
+        this.smilingMouth = this.loadPivoted("smiling_mouth.png", 6, 3, 0, -2);
+        this.boredMouth = this.loadPivoted("bored_mouth.png", 8, 6, 0, -2);
+        this.shockedMouth = this.loadPivoted("shocked_mouth.png", 12, 6, 0, -2);
+        this.evilMouth = this.loadPivoted("evil_mouth.png", 18, 8, 0, -2);
+        this.surprisedMouth = this.loadPivoted("surprised_mouth.png", 8, 6, 0, -2);
+        this.uuuMouth = this.loadPivoted("uuu_mouth.png", 2, 0, 0, -2);
+        
+        this.mouth = this.normalMouth;
+
+        this.normalEyes.leftEyeball = this.loadPivoted("eyeball.png", 3, 3, -13, 0);
+        this.normalEyes.rightEyeball = this.loadPivoted("eyeball.png", 3, 3, 8, 0);
+        this.normalEyes.append(this.normalEyes.leftEyeball, this.normalEyes.rightEyeball);
+        
+        this.evilEyes.leftEyeball = this.loadPivoted("evil_eyeball.png", 3, 3, -13, 0);
+        this.evilEyes.rightEyeball = this.loadPivoted("evil_eyeball.png", 3, 3, 8, 0);
+        this.evilEyes.append(this.evilEyes.leftEyeball, this.evilEyes.rightEyeball);
+        
+        this.leftArm = this.loadPivoted("left_arm.png", 19, 5, -17, -37);
+        this.rightArm = this.loadPivoted("right_arm.png", 5, 5, 17, -37);
+        this.normalRightArm = this.rightArm;
+        this.dethclaw = this.loadPivoted("dethclaw.png", 21, 83, 17, -37);
+        this.normalLeftFoot = this.leftFoot = this.loadPivoted("left_foot.png", 25, 3, -20, 47);
+        this.normalRightFoot = this.rightFoot = this.loadPivoted("right_foot.png", 4, 3, 20, 47);
+        this.rightLeftFoot = this.loadPivoted("right_foot.png", 4, 3, -40, 47);
+        this.leftRightFoot = this.loadPivoted("left_foot.png", 25, 3, 40, 47);
+        this.head.append(this.eyes, this.mouth, this.hat);
+        this.torso.zIndex = 0.5;
+        this.head.zIndex = 1;
+        this.append(
+            this.leftFoot, this.rightFoot,
+            this.leftArm, this.rightArm,
+            this.torso,
+            this.head);
+      },
+
+
+      plain : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.normalMouth);
+        });
+        return this;
+      },
+      
+      angry : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.angryMouth);
+        });
+        return this;
+      },
+
+      shockAndHorror : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.shockedMouth);
+        });
+        return this;
+      },
+      
+      smile : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.smilingMouth);
+        });
+        return this;
+      },
+
+      evilSmile : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.evilMouth);
+        });
+        return this;
+      },
+
+      bored : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.boredMouth);
+        });
+        return this;
+      },
+
+      surprised : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.surprisedMouth);
+        });
+        return this;
+      },
+
+      uuu : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.uuuMouth);
+        });
+        return this;
+      },
+
+      wagamama : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.boredMouth);
+        });
+        return this;
+      },
+
+      triumphant : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('mouth', this.smilingMouth);
+        });
+        return this;
+      },
+
+      headUpLeft : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = 0.2;
+        });
+        return this;
+      },
+
+      headDownLeft : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = -0.2;
+        });
+        return this;
+      },
+
+      headLevel : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = 0.0;
+        });
+        return this;
+      },
+      
+      takeOutMagicWand : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = -1;
+          this.rightArm.zIndex = 3;
+          this.magicWand.x = 13;
+          this.magicWand.y = 39;
+          this.magicWand.rotation = 1.3;
+          this.rightArm.append(this.magicWand);
+        });
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+      
+      summonCanvas : function() {
+        this.at(this.lastAction, function() {
+          this.leftArm.rotation = 2;
+          this.rightArm.rotation = -2.8;
+          this.demoCanvas = new ERectangle(50, 50, {fill: 'white', stroke:'black', strokeWidth:2, x:-20, y:25, rotation: 1.1});
+          this.demoSquare = new ERectangle(20, 20, {fill: 'black', x:25, y:25, centered: true});
+          this.demoCanvas.append(this.demoSquare);
+          this.leftArm.append(this.demoCanvas);
+        });
+        this.appendKeyframe(500, {});
+        return this;
+      },
+
+      makeSquareRotate : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 1;
+          this.magicWand.rotation = Math.PI+1.3;
+          this.demoSquare.addFrameListener(function(t){
+            this.rotation += 0.1;
+          });
+        });
+        this.appendKeyframe(500, {});
+        return this;
+      },
+
+      putAwayCanvas : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 1.5;
+          this.leftArm.rotation = 0;
+          this.demoCanvas.removeSelf()
+        });
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+
+      putAwayMagicWand : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0;
+          this.rightArm.zIndex = -1;
+          this.magicWand.rotation -= Math.PI/2;
+        });
+        this.appendKeyframe(500, {});
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0.5;
+          this.rightArm.zIndex = -1;
+          this.magicWand.removeSelf()
+        });
+        this.appendKeyframe(500, {});
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0;
+        });
+        return this;
+      },
+
+      thrashAbout : function() {
+        this.at(this.lastAction, function() {
+          this.thrashing = function(t) {
+            this.leftArm.zIndex = 3;
+            this.leftArm.rotation = 1.5 + Math.sin(t/200);
+            this.rightArm.zIndex = 3;
+            this.head.rotation = 0.2*Math.cos(t/200);
+            this.rightArm.rotation = -1.5 + -Math.cos(t/200);
+            this.rightFoot.rotation = 0.7*Math.sin(t/200);
+            this.leftFoot.rotation = 0.7*Math.cos(t/200);
+          };
+          this.addFrameListener(this.thrashing);
+        });
+        this.appendKeyframe(4000, {});
+        return this;
+      },
+
+      stopMoving : function() {
+        this.at(this.lastAction, function() {
+          this.removeFrameListener(this.thrashing);
+          this.after(1, function(){
+            this.leftArm.rotation = 1;
+            this.rightArm.rotation = -2;
+            this.rightArm.zIndex = -1;
+            this.head.rotation = 0;
+            this.rightFoot.rotation = 0;
+            this.leftFoot.rotation = 0;
+          });
+        });
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+
+      lookFront : function() {
+        this.at(this.lastAction, function() {
+          this.eyes.leftEyeball.y = 0;
+          this.eyes.rightEyeball.y = 0;
+          this.eyes.leftEyeball.x = -11;
+          this.eyes.rightEyeball.x = 10;
+        });
+        return this;
+      },
+
+      lookRight : function() {
+        this.at(this.lastAction, function() {
+          this.eyes.leftEyeball.y = 0;
+          this.eyes.rightEyeball.y = 0;
+          this.eyes.leftEyeball.x = -9;
+          this.eyes.rightEyeball.x = 12;
+        });
+        return this;
+      },
+
+      lookLeft : function() {
+        this.at(this.lastAction, function() {
+          this.eyes.leftEyeball.y = 0;
+          this.eyes.rightEyeball.y = 0;
+          this.eyes.leftEyeball.x = -13;
+          this.eyes.rightEyeball.x = 8;
+        });
+        return this;
+      },
+      
+      lookBottomRight : function() {
+        this.at(this.lastAction, function() {
+          this.eyes.leftEyeball.y = 4;
+          this.eyes.rightEyeball.y = 4;
+          this.eyes.leftEyeball.x = -9;
+          this.eyes.rightEyeball.x = 12;
+        });
+        return this;
+      },
+
+      lookBottomLeft : function() {
+        this.at(this.lastAction, function() {
+          this.eyes.leftEyeball.x = -13;
+          this.eyes.rightEyeball.x = 8;
+          this.eyes.leftEyeball.y = 4;
+          this.eyes.rightEyeball.y = 4;
+        });
+        return this;
+      },
+      
+      takeRemote : function() {
+        this.at(this.lastAction, function() {
+          this.leftArm.origX = this.leftArm.x;
+          this.leftArm.origY = this.leftArm.y;
+          this.rightArm.rotation = 0;
+          this.leftArm.zIndex = 3;
+          this.leftArm.rotation = 2;
+        });
+        this.appendKeyframe(500, {});
+        this.at(this.lastAction, function() {
+          this.parent.goat.remote.removeSelf();
+          this.remote = this.parent.goat.remote;
+          this.remote.x = -15;
+          this.remote.rotation = Math.PI + 1.8;
+          this.leftArm.append(this.remote);
+          this.leftArm.zIndex = 3;
+          this.leftArm.rotation = 0.5;
+        });
+        this.appendKeyframe(200, {});
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0.7;
+          this.rightArm.zIndex = 3;
+          this.leftArm.rotation = -0.7;
+          this.remote.x = 15;
+          this.remote.removeSelf();
+          this.remote.rotation = 1.8;
+          this.rightArm.append(this.remote);
+        });
+        this.appendKeyframe(200, {});
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0;
+          this.rightArm.zIndex = 0;
+          this.leftArm.rotation = 0;
+        });
+        this.appendKeyframe(200, {});
+        return this;
+      },
+
+      programRemote : function() {
+        this.at(this.lastAction, function() {
+          this.remote.x = 5;
+          this.remote.y -= 5;
+          this.rightArm.rotation = 0.7;
+          this.rightArm.zIndex = 3;
+          this.leftArm.rotation = -0.8;
+          this.leftArm.zIndex = 4;
+          this.leftArm.addFrameListener(this.beepBoop);
+        });
+        return this;
+      },
+
+      stopProgramming : function() {
+        this.at(this.lastAction, function() {
+          this.leftArm.removeFrameListener(this.beepBoop);
+          this.remote.x = 15;
+          this.remote.y += 5;
+          this.after(0, function() {
+            this.leftArm.x = this.leftArm.origX;
+            this.leftArm.y = this.leftArm.origY;
+            this.rightArm.zIndex = this.leftArm.zIndex = 0;
+            this.rightArm.rotation = 0;
+            this.leftArm.rotation = 0;
+          });
+        });
+        return this;
+      },
+
+      beepBoop : function(t) {
+        this.x += 0.5*Math.sin(t/50);
+        this.y += 0.5*Math.sin(t/50);
+      },
+
+      mutate : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('eyes', this.evilEyes);
+          this.eyes.leftEyeball.y = 4;
+          this.eyes.rightEyeball.y = 4;
+          this.eyes.leftEyeball.x = -9;
+          this.eyes.rightEyeball.x = 12;
+        });
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+
+      putAwayRemote : function() {
+        this.at(this.lastAction, function() {
+          this.remote.removeSelf();
+          this.rightArm.rotation = 0.5;
+          this.leftArm.rotation = 0;
+          this.leftArm.zIndex = -1;
+        });
+        this.appendKeyframe(500, {});
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0;
+        });
+        this.appendKeyframe(1500, {});
+        return this;
+      },
+
+      eyeBeamLow : function() {
+        this.lookBottomLeft();
+        this.at(this.lastAction, function() {
+          var leftBeam = new Rectangle(1000, 2, {fill: 'red'});
+          leftBeam.x = this.eyes.leftEyeball.currentMatrix[4];
+          leftBeam.y = this.eyes.leftEyeball.currentMatrix[5]+3;
+          var rightBeam = new Rectangle(1000, 2, {fill: 'red'});
+          rightBeam.x = this.eyes.rightEyeball.currentMatrix[4];
+          rightBeam.y = this.eyes.rightEyeball.currentMatrix[5]+3;
+          leftBeam.rotation = 
+          rightBeam.rotation = Math.PI-0.5;
+          leftBeam.after(500, leftBeam.removeSelf);
+          rightBeam.after(500, rightBeam.removeSelf);
+          this.root.append(leftBeam, rightBeam);
+        });
+        this.appendKeyframe(100, {});
+        this.at(this.lastAction, function() {
+          this.parent.append(new Explosion(2, {x:444, y:768}));
+          this.parent.append(new Explosion(2, {x:465, y:768}));
+        });
+        this.appendKeyframe(900, {});
+        return this;
+      },
+
+      eyeBeamHigh : function() {
+        this.lookLeft();
+        this.at(this.lastAction, function() {
+          this.head.rotation = 0.2;
+        });
+        this.appendKeyframe(100, {});
+        this.at(this.lastAction, function() {
+          var leftBeam = new Rectangle(1000, 2, {fill: 'red'});
+          leftBeam.x = this.eyes.leftEyeball.currentMatrix[4];
+          leftBeam.y = this.eyes.leftEyeball.currentMatrix[5]+4;
+          var rightBeam = new Rectangle(1000, 2, {fill: 'red'});
+          rightBeam.x = this.eyes.rightEyeball.currentMatrix[4];
+          rightBeam.y = this.eyes.rightEyeball.currentMatrix[5]+4;
+          leftBeam.rotation = 
+          rightBeam.rotation = Math.PI+0.3;
+          leftBeam.after(500, leftBeam.removeSelf);
+          rightBeam.after(500, rightBeam.removeSelf);
+          this.root.append(leftBeam, rightBeam);
+        });
+        this.appendKeyframe(100, {});
+        this.at(this.lastAction, function() {
+          this.parent.append(new Explosion(2, {x:0, y:400}));
+        });
+        this.appendKeyframe(900, {});
+        return this;
+      },
+
+      theEnd : function() {
+        this.at(this.lastAction, function() {
+          this.parent.append(new EndCredits());
+        });
+        return this;
+      },
+
+      startPartying : function() {
+        this.at(this.lastAction, function() {
+          this.partyOn();
+        });
+        return this;
+      },
+
+      isOffscreenRight : function() {
+        this.appendKeyframe(1, {});
+        this.x = 1024+80;
+        this.y = 690;
+        return this;
+      },
+      
+      isOffscreenLeft : function() {
+        this.appendKeyframe(1, {});
+        this.x = -80;
+        this.y = 690;
+        return this;
+      }
+
+    });
+
+
+    Goat = Klass(Paperdoll, {
+      prefix : "goat_sprite/",
+      
+      initialize : function() {
+        Paperdoll.initialize.call(this);
+        this.addEventListener("click", this.doWave.bind(this), false);
+//         this.makeDraggable();
+//         this.partyOn();
+      },
+      
+
+      runLeft : function() {
+        Paperdoll.runLeft.call(this);
+        this.turnLeftNow();
+      },
+      
+      runRight : function() {
+        Paperdoll.runRight.call(this);
+        this.turnRightNow();
+      },
+
+      turnRightNow : function() {
+        this.scale = this.speechbubble.scale = [1,1];
+      },
+      
+      turnLeftNow : function() {
+        this.scale = this.speechbubble.scale = [-1,1];
+      },
+      
+      partyOn : function() {
+        this.head.addFrameListener(function(t) { this.rotation = 0.25*Math.cos(t/100) });
+        this.leftArm.addFrameListener(function(t) { this.rotation = -t/500 % Math.PI*2 });
+        this.rightArm.addFrameListener(function(t) { this.rotation = Math.PI - t/500 % Math.PI*2 });
+        this.leftFoot.addFrameListener(function(t) { this.y = 120 + 5*Math.sin(t/100) });
+        this.rightFoot.addFrameListener(function(t) { this.y = 120 + 5*Math.sin(-t/100) });
+      },
+
+      loadParts : function() {
+        this.remote = this.loadPivoted("remote.png", 12, 41, 20, 40);
+        this.remote.rotation = 1.5;
+        this.rightTorso = this.loadPivoted("torso_front_right.png", 80, 47, 0, 0);
+        this.torso = this.rightTorso;
+        
+        this.normalHead = this.loadPivoted("head_front_right_normal.png", 57, 83, 15, -30);
+        this.normalEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.normalEyebrows = this.loadPivoted("eyebrows_front_right_normal.png", 30, 12, 6, -40);
+        this.normalHead.append(this.normalEyes, this.normalEyebrows);
+        this.normalHead.zIndex = 3;
+
+        this.laughHead = this.loadPivoted("head_front_right_laugh.png", 57, 83, 15, -30);
+        this.laughEyes = this.loadPivoted("eyes_front_right_laugh.png", 25, 4, 8, -34);
+        this.laughEyebrows = this.loadPivoted("eyebrows_front_right_laugh.png", 30, 12, 6, -40);
+        this.laughHead.append(this.laughEyes, this.laughEyebrows);
+        this.laughHead.zIndex = 3;
+
+        this.evilLaughHead = this.loadPivoted("head_front_right_laugh.png", 57, 83, 15, -30);
+        this.evilLaughEyes = this.loadPivoted("eyes_front_right_laugh.png", 25, 4, 8, -34);
+        this.evilLaughEyebrows = this.loadPivoted("eyebrows_front_right_pissed.png", 30, 12, 6, -40);
+        this.evilLaughHead.append(this.evilLaughEyes, this.evilLaughEyebrows);
+        this.evilLaughHead.zIndex = 3;
+
+        this.worrySmileHead = this.loadPivoted("head_front_right_laugh.png", 57, 83, 15, -30);
+        this.worrySmileEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.worrySmileEyebrows = this.loadPivoted("eyebrows_front_right_worried.png", 30, 12, 6, -40);
+        this.worrySmileHead.append(this.worrySmileEyes, this.worrySmileEyebrows);
+        this.worrySmileHead.zIndex = 3;
+
+        this.uuuHead = this.loadPivoted("head_front_right_uuu.png", 57, 83, 15, -30);
+        this.uuuEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.uuuEyebrows = this.loadPivoted("eyebrows_front_right_laugh.png", 30, 12, 6, -40);
+        this.uuuHead.append(this.uuuEyes, this.uuuEyebrows);
+        this.uuuHead.zIndex = 3;
+
+        this.worriedHead = this.loadPivoted("head_front_right_worried.png", 57, 83, 15, -30);
+        this.worriedEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.worriedEyebrows = this.loadPivoted("eyebrows_front_right_worried.png", 30, 12, 6, -40);
+        this.worriedHead.append(this.worriedEyes, this.worriedEyebrows);
+        this.worriedHead.zIndex = 3;
+
+        this.pissedHead = this.loadPivoted("head_front_right_worried.png", 57, 83, 15, -30);
+        this.pissedEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.pissedEyebrows = this.loadPivoted("eyebrows_front_right_pissed.png", 30, 12, 6, -40);
+        this.pissedHead.append(this.pissedEyes, this.pissedEyebrows);
+        this.pissedHead.zIndex = 3;
+
+        this.gaaHead = this.loadPivoted("head_front_right_worried.png", 57, 83, 15, -30);
+        this.gaaEyes = this.loadPivoted("eyes_front_right_normal.png", 25, 4, 8, -34);
+        this.gaaEyebrows = this.loadPivoted("eyebrows_front_right_worried.png", 30, 12, 6, -40);
+        this.gaaHead.append(this.gaaEyes, this.gaaEyebrows);
+        this.gaaHead.zIndex = 3;
+
+        this.head = this.normalHead;
+        this.eyes = this.normalEyes;
+        this.eyebrows = this.normalEyebrows;
+        
+        this.leftArm = this.rightLeftArm = this.loadPivoted("hand_right.png", 6, 6,  -20, 10);
+        this.rightArm = this.rightRightArm  = this.loadPivoted("hand_right.png", 6, 6, 50, 10);
+        this.leftFoot = this.rightLeftFoot  = this.loadPivoted("foot_right.png", 12, 7, -30, 120);
+        this.rightFoot = this.rightRightFoot = this.loadPivoted("foot_right.png", 12, 7, 40, 120);
+        this.head.zIndex = 2;
+        this.leftArm.zIndex = this.rightArm.zIndex = 1;
+        this.rightFoot.zIndex = -1;
+        this.leftFoot.zIndex = -1;
+        this.append(
+            this.rightFoot,
+            this.leftFoot,
+            this.torso,
+            this.leftArm, this.rightArm,
+            this.head);
+      },
+
+      plain : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.normalHead);
+          this.head.rotation = 0;
+        });
+        return this;
+      },
+
+      serious : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.normalHead);
+          this.head.rotation = Math.PI/8;
+        });
+        return this;
+      },
+      
+      smile : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.laughHead);
+        });
+        return this;
+      },
+
+      evilSmile : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.evilLaughHead);
+        });
+        return this;
+      },
+
+      worriedSmile : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.worrySmileHead);
+        });
+        return this;
+      },
+
+      uuu : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.uuuHead);
+//           this.head.rotation = Math.PI / 6;
+        });
+        return this;
+      },
+
+      worried : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.worriedHead);
+          this.head.rotation = Math.PI / 12;
+        });
+        return this;
+      },
+
+      pissed : function() {
+        this.at(this.lastAction, function() {
+          this.swapPart('head', this.pissedHead);
+          this.head.rotation = Math.PI / 12;
+        });
+        return this;
+      },
+      
+      takeOutRemote : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.append(this.remote);
+          this.leftArm.origX = this.leftArm.x;
+          this.leftArm.origY = this.leftArm.y;
+        });
+        this.appendKeyframe(1, {});
+        this.programRemote();
+        this.appendKeyframe(4000, {});
+        return this;
+      },
+
+      programRemote : function() {
+        this.at(this.lastAction, function() {
+          this.rightArm.rotation = 0.8;
+          this.leftArm.rotation = 0;
+          this.leftArm.zIndex = 2;
+          this.leftArm.x += 30;
+          this.leftArm.y += 5;
+          this.leftArm.addFrameListener(this.beepBoop);
+        });
+        return this;
+      },
+
+      stopProgramming : function() {
+        this.at(this.lastAction, function() {
+          this.leftArm.removeFrameListener(this.beepBoop);
+          this.after(0, function() {
+            this.leftArm.x = this.leftArm.origX;
+            this.leftArm.y = this.leftArm.origY;
+            this.rightArm.rotation = 0;
+            this.leftArm.rotation = 0;
+          });
+        });
+        return this;
+      },
+
+      beepBoop : function(t) {
+        this.x += 0.2*Math.sin(t/100);
+        this.y += 0.5*Math.sin(t/100);
+      },
+
+      lookUp : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = -Math.PI / 8;
+        });
+        return this;
+      },
+
+      lookDown : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = Math.PI / 12;
+        });
+        return this;
+      },
+
+      lookLevel : function() {
+        this.at(this.lastAction, function() {
+          this.head.rotation = 0;
+        });
+        return this;
+      },
+
+      breakUpTomte : function() {
+        this.at(this.lastAction, function() {
+          var tomte = this.parent.tomte;
+          tomte.y -= 200;
+          tomte.leftArm.x -= 30;
+          tomte.leftArm.y -= 10;
+          tomte.rightArm.x += 30
+          tomte.rightArm.y -= 10;
+          tomte.leftFoot.y += 30;
+          tomte.rightFoot.y += 30;
+          tomte.leftFoot.x -= 30;
+          tomte.rightFoot.x += 30;
+          tomte.head.y -= 20;
+        });
+        this.appendKeyframe(1, {});
+        this.stopProgramming();
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+
+      giveTomteDethclaw : function() {
+        this.at(this.lastAction, function() {
+          var tomte = this.parent.tomte;
+          tomte.swapPart('rightArm', tomte.dethclaw);
+          tomte.rightArm.x += 30
+          tomte.rightArm.y -= 10;
+        });
+        return this;
+      },
+
+      putBackTomte : function() {
+        this.at(this.lastAction, function() {
+          var tomte = this.parent.tomte;
+          tomte.swapPart('rightArm', tomte.normalRightArm);
+          tomte.y += 200;
+          tomte.leftArm.x += 30;
+          tomte.leftArm.y += 10;
+          tomte.rightArm.x -= 30
+          tomte.rightArm.y += 10;
+          tomte.leftFoot.y -= 30;
+          tomte.rightFoot.y -= 30;
+          tomte.leftFoot.x += 30;
+          tomte.rightFoot.x -= 30;
+          tomte.head.y += 20;
+          tomte.rightArm.rotation = 0;
+          tomte.rightArm.zIndex = -1;
+          tomte.leftArm.rotation = 0;
+          tomte.leftArm.zIndex = -1;
+        });
+        this.appendKeyframe(1000, {});
+        return this;
+      },
+      
+      isOffscreenRight : function() {
+        this.appendKeyframe(1, {});
+        this.x = 1024+80;
+        this.y = 580;
+        return this;
+      },
+      
+      isOffscreenLeft : function() {
+        this.appendKeyframe(1, {});
+        this.x = -80;
+        this.y = 580;
+        return this;
+      }
+
+    });
+
+
+    MozCampEU09 = Klass(CanvasNode, {
+      initialize : function(canvasElem) {
+        CanvasNode.initialize.call(this)
+        this.canvas = new Canvas(canvasElem)
+        this.canvas.frameDuration = 30
+//         this.canvas.fill = [245, 235, 230, 0.1];
+        this.canvas.append(this)
+        this.canvas.fixedTimestep = true
+        this.canvas.clear = true
+        this.canvas.playOnlyWhenFocused = false
+        this.fx = new ImageNode(canvasElem);
+        this.fx.y = -10;
+        this.fx.zIndex = 100;
+        this.fx.compositeOperation = 'lighter';
+        this.fx.opacity = 0.2;
+        this.fx.visible = false;
+        this.fx.addFrameListener(function(t) {
+          this.x = 3 * Math.sin(t/200 + Math.random());
+          this.y = -6 + 3 * Math.cos(t/200);
+          this.rotation = Math.sin(t/400 + Math.random())*0.01;
+        });
+        this.append(this.fx);
+
+//         this.bg = ImageNode.load("trees2.jpg");
+        this.bg = new Rectangle(1024,768,{fill:[0,0,0,0.5]});
+        this.bg.zIndex = -1;
+        this.bg.visible = false;
+        this.append(this.bg);
+        
+        this.scale = Math.min(this.canvas.height / 768, this.canvas.width / 1024)
+        var tomte = new Tomte()
+        var goat = new Goat()
+        this.tomte = tomte;
+        this.goat = goat;
+        this.append(goat);
+        this.append(tomte);
+        this.setupEtc();
+        this.playScript();
+        this.showTimelineFor(this.tomte, $('ttl'), $('tkf'));
+        this.showTimelineFor(this.goat, $('gtl'), $('gkf'));
+        var ticker = $('time-ticker');
+        this.addFrameListener(function(t) {
+          ticker.style.left = t / 100 + 'px';
+        });
+      },
+
+      showInfoHandler : function(ev) {
+        if (this.info) {
+          this.info.parentNode.removeChild(this.info);
+          delete this.info;
+        } else {
+          this.info = E('textarea', {className: 'keyinfo'});
+          this.info.appendChild(T(Object.toSource(this.tlevent)));
+          document.body.appendChild(this.info);
+          this.info.style.top = this.parentNode.parentNode.offsetTop + this.parentNode.offsetTop - this.info.offsetHeight + 'px';
+          this.info.style.left = this.offsetLeft + 'px';
+        }
+      },
+
+      showTimelineFor : function(obj, tl, kfs) {
+        obj.addPendingKeyframes(0);
+        obj.addPendingTimelineEvents(0);
+        var h = this.showInfoHandler;
+        obj.timeline.forEach(function(tle) {
+          var kf = E('div', {className: 'timelineframe', tlevent: tle, style:{left: tle.startTime/100+'px'}})
+          kf.addEventListener('click', h, false);
+          tl.appendChild(kf);
+        });
+//         obj.keyframes.forEach(function(tle) {
+//           var kf = E('div', {className: 'keyframe' + (Object.isEmpty(tle.target) ? ' empty' : ''), tlevent: tle, style:{left: tle.time/100+'px'}});
+//           kf.addEventListener('click', h, false);
+//           kfs.appendChild(kf);
+//         });
+      },
+
+      playScript : function() {
+        this.tomte
+          .wait(100)
+          .isOffscreenRight()
+          .plain()
+          .lookLeft()
+          .walkTo(700, 690)
+          .lookFront()
+
+          .smile()
+          .wave()
+          .headDownLeft()
+          .say("Hi, I'm Tomte!", "tomte_hi")
+          .headLevel()
+          .lookLeft()
+          .plain()
+          .wait(6000)
+          .waitFor("goat2")
+          
+          .wagamama()
+          .headUpLeft()
+          .say("You tell them!")
+          .headLevel()
+          .lookBottomRight()
+          .triumphant()
+          .lookRight()
+          .takeOutMagicWand()
+          .headDownLeft()
+          .lookFront()
+          .say("I have a magic wand.", "tomte_wand")
+          .lookLeft()
+          .headLevel()
+          .wait(4000)
+
+          .smile()
+          .headUpLeft()
+          .summonCanvas()
+          .say("Ha!")
+          .wait(1000)
+          .headLevel()
+          .makeSquareRotate()
+          .say("Ho!", "animateCanvas")
+          .wait(3000)
+          .putAwayCanvas()
+          .headUpLeft()
+          .lookBottomRight()
+          .putAwayMagicWand()
+          .lookLeft()
+          .headLevel()
+
+          .wait(2000)
+          .plain()
+          .wait(3000)
+          .bored()
+          .say("Booriiing!", "boredTomte")
+
+          .wait(3000)
+          .waitFor("letsBreakTomte")
+          .smile()
+          .lookFront()
+          .say("Yes, let's break...")
+          .lookLeft()
+          .surprised()
+          .say("Wait WHAT?!", "waitWhat")
+
+          .wait(3000)
+          .lookBottomLeft()
+          .angry()
+          .say("I hate you, sir Goat!")
+
+          .thrashAbout()
+          .lookBottomRight()
+          .say("GAAA")
+          .lookBottomLeft()
+          .say("GNAAA")
+          .wait(1500)
+          .stopMoving()
+
+          .shockAndHorror()
+          .lookBottomRight()
+          .say("GAAAA!!!")
+          .say("WILL YOU STOP THAT!!!")
+
+          .wait(3000)
+          .uuu()
+          .say("ooo")
+          .plain()
+          .lookLeft()
+          .startRunningLeft()
+          .wait(650)
+          .stop()
+          .sayBg("Gimme that")
+          .wait(1000)
+          .headUpLeft()
+          .takeRemote()
+          .lookRight()
+          .headLevel()
+          .startRunningRight()
+          .wait(650)
+          .stop()
+
+          .headUpLeft()
+          .lookBottomRight()
+          .wait(100)
+          .programRemote()
+          .wait(6900)
+          .stopProgramming()
+          .mutate()
+          .putAwayRemote()
+          
+          .lookLeft()
+          .headLevel()
+          .evilSmile()
+          .wait(6000)
+          
+          .lookBottomLeft()
+          .wait(1000)
+          .eyeBeamLow()
+          .lookLeft()
+          .wait(1000)
+          .startRunningAround()
+          .sayBg("Waiit uuppp!!")
+          .wait(4000)
+          .stopRunningAround()
+          .sayBg("Let's play!!")
+          .wait(500)
+          .eyeBeamHigh()
+          .wait(1000)
+          .headLevel()
+          .startRunningLeft()
+
+          .wait(2600)
+          .stop()
+          .theEnd()
+          .wait(3200)
+          .startRunningRight()
+          .lookRight()
+          .wait(1000)
+          .stop()
+          .lookFront()
+          .smile()
+          .wave()
+          .wait(3000)
+          .stopCanvas()
+
+        this.goat
+          .wait(100)
+          .isOffscreenLeft()
+          .plain()
+          .walkTo(324, 580)
+          .wait(3000)
+          .smile()
+          .wave()
+          .say("And I'm Goat!")
+          .lookUp()
+          .say("We're here to tell you about HTML5 Canvas animation.", "goat2")
+          .lookDown()
+          .plain()
+          .wait(4000)
+          .uuu()
+          .waitFor("tomte_wand")
+          .wait(4500)
+
+          .smile()
+          .say("The canvas is an image that you can draw on.")
+          .wait(2000)
+          .waitFor("summonCanvas")
+          .lookLevel()
+          .say("To animate, redraw the image several times a second.")
+          .waitFor("animateCanvas")
+          .wait(4000)
+
+          .serious()
+          .say("To do more complex animations, you need some way to manage your scene.")
+          .plain()
+          .lookLevel()
+          .say("One way is to use a scene graph where your objects form an editable tree.")
+          .lookUp()
+          .say("HTML and SVG documents are scene graphs, so it's not an alien concept or...")
+          .serious()
+          .lookDown()
+          .waitFor("boredTomte")
+
+          .wait(2000)
+          .pissed()
+          .say("For example, let's break up dear Tomte here.")
+          .takeOutRemote()
+          .wait(2000)
+          .breakUpTomte()
+
+          .wait(3500)
+          .evilSmile()
+          .lookUp()
+          .say("MWAHAHAHA!")
+
+          .serious()
+          .say("Tomte is made up of the head, torso and limbs.")
+          .lookLevel()
+          .wait(500)
+          .smile()
+          .lookUp()
+          .say("Each can be rotated and moved independently.")
+          .serious()
+          .lookDown()
+          .programRemote()
+          .wait(3000)
+          .stopProgramming()
+
+          .smile()
+          .lookUp()
+          .giveTomteDethclaw()
+          .say("And swapped for different looks.")
+          .wait(3000)
+
+          .serious()
+          .lookDown()
+          .programRemote()
+          .say("Let's return Tomte to his normal self.")
+          .stopProgramming()
+          .putBackTomte()
+          .lookLevel()
+          .say("And continue our talk.")
+
+          .wait(3000)
+          .say("This sort of paper doll animation is quite an easy way to bring your drawings to life...")
+          .wait(1000)
+          .worried()
+          .say("...what are you doing?")
+          .wait(2000)
+          
+          .say("...")
+          .worriedSmile()
+          .say("What happened to your eyes?")
+
+          .wait(1000)
+          .sayBg("GAAA")
+//           .takeAStepBack()
+          .wait(1000)
+          .startRunningAround()
+          .say("Stay away!!!")
+          .stopRunningAround()
+          .wait(40)
+          .startRunningLeft()
+      },
+
+      setupEtc : function() {
+        this.canvas.updateFps = true
+        var debug = E('div')
+        var t0 = -1
+        var frames = []
+        var fc = E.canvas(200, 10)
+        var fpsE = T('')
+        var elapsedE = T('')
+        var realFpsE = T('')
+        var elapsedRealE = T('')
+        debug.append(fpsE, ' fps (', elapsedE, ' ms to draw scene)', E('br'),
+          realFpsE, ' real fps (', elapsedRealE, ' ms between frames)',
+          E('br'), fc)
+        var fctx = fc.getContext('2d')
+        fctx.globalCompositeOperation = 'copy'
+        fctx.fillStyle = '#828292'
+        this.canvas.addFrameListener(function(t) {
+          if (this.updateFps) {
+            fctx.drawImage(fc, -1, 0)
+            fctx.clearRect(199, 0, 1, 10)
+            fctx.fillRect(199, 0, 1, Math.min(100, this.currentRealFps) / 3.3)
+            if (Math.floor(t / 500) != t0) {
+              t0 = Math.floor(t / 500)
+              var fps = (Math.floor(this.fps * 10)/10)
+              var elapsed = Math.floor(1000 / this.fps)
+              var realFps = (Math.floor(this.realFps * 10)/10)
+              var elapsedReal = Math.floor(1000 / this.realFps)
+              fpsE.textContent = fps
+              elapsedE.textContent = elapsed
+              realFpsE.textContent = realFps
+              elapsedRealE.textContent = elapsedReal
+            }
+          }
+        })
+        this.canvasControlPanel = new GuiConfig({
+          object : this.canvas,
+          container : $('debug'),
+          title : 'Debug',
+          controls : [
+            'updateFps',
+            'playOnlyWhenFocused',
+            'drawBoundingBoxes',
+            ['useMockContext', 'boolean', {title: "Turn off drawing. Useful for benchmarking the JS."}]
+          ]
+        })
+        this.canvasControlPanel.show()
+        this.animControlPanel = new GuiConfig({
+          object : this,
+          container : $('debug'),
+          title : 'Animation controls',
+          controls : [
+            'fancyEffects'
+          ]
+        })
+        this.animControlPanel.show()
+        $('debug').appendChild(debug)
+      },
+
+      fancyEffects : false,
+
+      setFancyEffects : function(f) {
+        this.fancyEffects = this.fx.visible = f;
+        this.canvas.fill = f ? [0,0,0,0.2] : null;
+      }
+
+    })
+
+
+    toggleDebug = function() {
+      var d = $('debug')
+      var s = (d.style.display == 'block')
+      d.style.display = s ? 'none' : 'block'
+      $('debugtoggle').innerHTML = s ? '[+]' : '[-]'
+    }
+
+
+    init = function() {
+      if (!CanvasSupport.isCanvasSupported()) return false;
+      var iw = window.innerWidth / 1024;
+      var ih = window.innerHeight / 768;
+      var scale = Math.min(1, Math.min(iw,ih));
+      var c = E.canvas(scale * 1024, scale * 768);
+//       var c = E.canvas(window.innerWidth, window.innerHeight);
+      var d = E('div', { id: 'screen' });
+      var loading = E('div', 'Loading...', {id: 'loading'});
+      var clickToPlay = new CanvasNode({x:512, y:384});
+      var html5 = new ElementNode(E('div', 'HTML5', {id: 'html5'}),
+        {x : 840, y : 10, rotation:0.2}
+      );
+      clickToPlay.append(new ElementNode(E('div', 'Canvas Animation', {id: 'canvasAnim'}),
+        {y: 0, align:'center', valign:'bottom', rotation: -0.1}
+      ));
+      clickToPlay.append(new ElementNode(E('div', 'Click to play', {id: 'clickIt'}),
+        {y: 100, align:'center', valign:'top', rotation: 0.1}
+      ));
+      d.appendChild(c);
+      d.appendChild(loading);
+      document.body.appendChild(d);
+      window.onresize = function(){
+        d.style.left = Math.max(0,(window.innerWidth-c.width) / 2) + 'px';
+        d.style.top = Math.max(0,(window.innerHeight-c.height) / 2) + 'px';
+      };
+      window.onresize();
+      var loaders = imagesToLoad.map(function(i){
+        var img = new Image();
+        img.onload = function() {
+          this.done = true;
+          if (loaders.every(function(l){return l.done})) {
+            d.removeChild(loading);
+            Presentation = new MozCampEU09(c);
+            Presentation.append(clickToPlay, html5)
+            Presentation.at(10, function() {
+              Presentation.canvas.stop();
+            });
+            window.addEventListener('keydown', function(ev){
+              if (ev.keyCode == 37) {
+                Presentation.goat.runLeft();
+                Presentation.goat.addFrameListener(Presentation.goat.runMoveLeft);
+              } else if (ev.keyCode == 39) {
+                Presentation.goat.runRight();
+                Presentation.goat.addFrameListener(Presentation.goat.runMoveRight);
+              } else if (ev.keyCode == 38) {
+                Presentation.goat.head.rotation = 0.2;
+              } else if (ev.keyCode == 40) {
+                Presentation.goat.head.rotation = -0.2;
+              } else {
+                return;
+              }
+              ev.preventDefault();
+            }, false);
+            window.addEventListener('keypress', function(ev) {
+              if (ev.keyCode >= 37 && ev.keyCode <= 40)
+                ev.preventDefault();
+            }, false);
+            window.addEventListener('keyup', function(ev) {
+              if (ev.keyCode == 37) {
+                Presentation.goat.stopNow();
+              } else if (ev.keyCode == 39) {
+                Presentation.goat.stopNow();
+              } else if (ev.keyCode == 38) {
+                Presentation.goat.head.rotation = 0.0;
+              } else if (ev.keyCode == 40) {
+                Presentation.goat.head.rotation = 0.0;
+              } else {
+                return;
+              }
+              ev.preventDefault();
+            }, false);
+            Presentation.canvas.addEventListener('click', function(ev) {
+              if (Presentation.canvas.isPlaying) {
+                Presentation.canvas.stop();
+              } else {
+                Presentation.canvas.play();
+                if (clickToPlay.parent)
+                  clickToPlay.removeSelf();
+              }
+            },false);
+          }
+        }
+        img.src = i;
+        return img;
+      });
+    }
+
+    imagesToLoad = [
+//       "bg_day.jpg",
+//       "bg.jpg",
+      "goat_sprite/eyes_front_right_laugh.png",
+      "goat_sprite/eyes_front_right_normal.png",
+      "goat_sprite/eyebrows_front_right_pissed.png",
+      "goat_sprite/head_front_right_uuu.png",
+      "goat_sprite/eyebrows_front_right_normal.png",
+      "goat_sprite/torso_front_right.png",
+      "goat_sprite/remote.png",
+      "goat_sprite/hand_right.png",
+      "goat_sprite/head_front_right_normal.png",
+      "goat_sprite/foot_right.png",
+      "goat_sprite/torso_right.png",
+      "goat_sprite/head_right.png",
+      "goat_sprite/eyebrows_front_right_laugh.png",
+      "goat_sprite/eyebrows_front_right_worried.png",
+      "goat_sprite/head_front_right_worried.png",
+      "goat_sprite/head_front_right_laugh.png",
+      "tomte_sprite/surprised_mouth.png",
+      "tomte_sprite/evil_eyes.png",
+      "tomte_sprite/evil_eyeball.png",
+      "tomte_sprite/magicwand.png",
+      "tomte_sprite/eyes.png",
+      "tomte_sprite/bored_mouth.png",
+      "tomte_sprite/right_foot.png",
+      "tomte_sprite/right_arm.png",
+      "tomte_sprite/evil_mouth.png",
+      "tomte_sprite/smilingMouth.png",
+      "tomte_sprite/hat.png",
+      "tomte_sprite/left_arm.png",
+      "tomte_sprite/mouth.png",
+      "tomte_sprite/left_foot.png",
+      "tomte_sprite/torso_front.png",
+      "tomte_sprite/angry_mouth.png",
+      "tomte_sprite/eyeball.png",
+      "tomte_sprite/shadow.png",
+      "tomte_sprite/smiling_mouth.png",
+      "tomte_sprite/dethclaw.png",
+      "tomte_sprite/uuu_mouth.png",
+      "tomte_sprite/shocked_mouth.png",
+      "tomte_sprite/head.png"
+    ];
+  </script>
+  <style>
+    * { margin: 0px; padding: 0px; }
+    body {
+      font-size: 12px;
+      font-family: Arial, Helvetica;
+      background: #222222;
+      color: #828292;
+    }
+    a {
+      color: #8282c2;
+    }
+    h1 {
+      color: #727282;
+      letter-spacing: 20px;
+      margin-left: 10px;
+      font-size: 16px;
+    }
+    h2 {
+      color: #727282;
+      letter-spacing: 18px;
+      margin-left: 9px;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    h3 {
+      font-size: 14px;
+      font-family: Trebuchet MS, Arial, Helvetica;
+      color: #827262;
+      margin-left: 4px;
+    }
+    ol {
+      color: #827262;
+      text-align: center;
+      list-style: none;
+    }
+    li h3 {
+      margin: 0px;
+      margin-bottom: 4px;
+    }
+
+    #canvasAnim {
+      font-size: 120px;
+      font-weight: bold;
+      white-space: nowrap;
+      font-family: Trebuchet MS;
+      color: #ffffff;
+      text-shadow: 2px 2px 10px #000;
+    }
+    #html5 {
+      font-size: 50px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      opacity: 0.8;
+      color: #fff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.8);
+    }
+    #clickIt {
+      cursor: pointer;
+      font-size: 80px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      text-align: center;
+      color: #ffffff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.8);
+    }
+    .theEnd {
+      font-size: 220px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      color: #ffffff;
+      text-shadow: 2px 2px 10px #000;
+    }
+    .speechbubble {
+      padding: 20px;
+      background-color: #FFF8EF;
+/*       border: 4px solid black; */
+      -moz-border-radius: 16px;
+      -moz-box-shadow: 2px 2px 10px #000;
+      border-radius: 16px;
+      box-shadow: 2px 2px 10px #000;
+      font-size: 20px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      text-align: center;
+      max-width: 400px;
+    }
+    
+    .message h1, .message h2 {
+      margin-left: 0px;
+      letter-spacing: 0px;
+      margin-bottom: 20px;
+    }
+    .message div {
+      margin-bottom: 50px;
+    }
+    div.message {
+      width: 360px;
+    }
+    .message {
+      text-align: center;
+      color: #827262;
+      font-size: 12px;
+    }
+    input {
+      margin-right : 4px;
+    }
+    #debug p {
+      margin-bottom: 4px;
+    }
+    #debug div {
+      margin-bottom: 8px;
+    }
+    #screen {
+      cursor: default;
+/*       width: 1024px; */
+/*       height: 768px; */
+      display: block;
+      overflow: hidden;
+      position: absolute;
+      z-index: 1;
+      background: #DFD8CF;
+      background-image: url(trees2.jpg);
+      background-position: left bottom;
+    }
+    #debug {
+      color: #828292;
+      background-color: rgba(0,0,0,0.8);
+      padding: 10px;
+      font-size: 12px;
+      position: absolute;
+      z-index: 2;
+      left: 32px;
+      max-width: 300px;
+      top: 0px;
+      display: none;
+    }
+    #debugtoggle {
+      position: absolute;
+      font-family: monospace;
+      color: #827262;
+      z-index: 2;
+      left: 8px;
+      top: 8px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #debug canvas {
+      margin-top: 4px;
+    }
+    #tomte-info {
+      position: absolute;
+      left: 0px;
+      top: 770px;
+      display: none;
+    }
+    #goat-info {
+      position: absolute;
+      left: 0px;
+      top: 814px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .keyframes {
+      position: absolute;
+      left: 0px;
+      top: 20px;
+      height: 20px;
+      width: 1224px;
+      background-color: silver;
+    }
+    .timeline {
+      position: absolute;
+      left: 0px;
+      top: 20px;
+      width: 1224px;
+      height: 20px;
+      background-color: silver;
+    }
+    .keyframe {
+      position: absolute;
+      display: block;
+      width: 3px;
+      height: 18px;
+      border: 1px solid grey;
+      background-color: #99f;
+    }
+    .timelineframe {
+      position: absolute;
+      display: block;
+      width: 3px;
+      height: 18px;
+      border: 1px solid grey;
+      background-color: #9f9;
+    }
+    .empty {
+      background-color: grey;
+    }
+    #time-ticker {
+      position: absolute;
+      left: 0px;
+      top:790px;
+      display: block;
+      width: 1px;
+      height: 64px;
+      background-color: #f00;
+      display: none;
+      z-index: 2;
+    }
+    .keyinfo {
+      position: absolute;
+      width: 400px;
+      min-height: 400px;
+      z-index: 3;
+      background-color: #ccf;
+      color: black;
+      font-size: small;
+      -moz-box-shadow: 0px 1px 2px #000;
+    }
+  </style>
+</head>
+<body spellcheck="false">
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/chrome-frame/1/CFInstall.min.js"> </script>
+  <div id="debug">
+  </div>
+  <div id="placeholder">
+  </div>
+ 
+<script>
+ CFInstall.check({ node: "placeholder" });
+</script>
+
+  <div id="debugtoggle" onclick="toggleDebug()">[+]</div>
+  <div id="time-ticker"></div>
+  <div id="tomte-info">
+    <h3>Tomte</h3>
+<!--     <div id="tkf" class="keyframes"></div> -->
+    <div id="ttl" class="timeline"></div>
+  </div>
+  <div id="goat-info">
+    <h3>Goat</h3>
+<!--     <div id="gkf" class="keyframes"></div> -->
+    <div id="gtl" class="timeline"></div>
+  </div>
+  <script type="text/javascript">init()</script>
+</body>
+</html>
