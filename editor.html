@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Presentation Editor - HTML5 Canvas Animation</title>
+  <meta http-equiv="X-UA-Compatible" content="chrome=1">
+  <script type="text/javascript" src="src/cake.js"></script>
+  <script type="text/javascript" src="src/support.js"></script>
+  <script type="text/javascript" src="src/editor.js"></script>
+  <script type="text/javascript">
+
+    UseCSSTransforms = false;
+    ShowPivots = false;
+
+    M = {
+      rotation : function(rotation) {
+        return CanvasSupport.tRotationMatrix(rotation)
+      },
+
+      scaling : function(x, y) {
+        return CanvasSupport.tScalingMatrix(x, y)
+      },
+
+      translation : function(x, y) {
+        return CanvasSupport.tTranslationMatrix(x, y)
+      }
+    }
+
+    V = {
+      rotate : function(v, rotation) {
+        return V.multiply(v, M.rotation(rotation))
+      },
+
+      add : function(v, u) {
+        return [u[0] + v[0], u[1] + v[1]]
+      },
+
+      multiply : function(v, matrix) {
+        return CanvasSupport.tMatrixMultiplyPoint(matrix, v[0], v[1])
+      }
+    }
+
+    SimplePresentation = Klass(CanvasNode, {
+      initialize : function(canvasElem) {
+        CanvasNode.initialize.call(this)
+        this.canvas = new Canvas(canvasElem)
+        this.canvas.frameDuration = 30
+        this.canvas.append(this)
+        this.canvas.fixedTimestep = true
+        this.canvas.clear = true
+        this.canvas.playOnlyWhenFocused = false
+        
+        this.bg = new Rectangle(1024, 768, {fill: '#f0f0f0'});
+        this.bg.zIndex = -1;
+        this.append(this.bg);
+        
+        this.scale = Math.min(this.canvas.height / 768, this.canvas.width / 1024)
+        
+        // Add some demo content
+        this.addDemoContent();
+      },
+      
+      addDemoContent : function() {
+        var text = E('div', 'Welcome to Presentation Editor');
+        text.className = 'welcome-text';
+        text.style.fontSize = '48px';
+        text.style.fontWeight = 'bold';
+        text.style.fontFamily = 'Arial, sans-serif';
+        text.style.color = '#333';
+        var textNode = new ElementNode(text, {x: 512, y: 384});
+        textNode.align = textNode.valign = 'center';
+        this.append(textNode);
+        
+        var subtext = E('div', 'Use the editor panel on the right to create slides');
+        subtext.style.fontSize = '24px';
+        subtext.style.fontFamily = 'Arial, sans-serif';
+        subtext.style.color = '#666';
+        var subtextNode = new ElementNode(subtext, {x: 512, y: 450});
+        subtextNode.align = subtextNode.valign = 'center';
+        this.append(subtextNode);
+      }
+    })
+
+    init = function() {
+      if (!CanvasSupport.isCanvasSupported()) {
+        alert('Canvas is not supported in this browser');
+        return false;
+      }
+      
+      var iw = window.innerWidth / 1024;
+      var ih = window.innerHeight / 768;
+      var scale = Math.min(1, Math.min(iw, ih));
+      var c = E.canvas(scale * 1024, scale * 768);
+      var d = E('div', { id: 'screen' });
+      
+      d.appendChild(c);
+      document.body.appendChild(d);
+      
+      window.onresize = function() {
+        d.style.left = Math.max(0, (window.innerWidth - c.width) / 2) + 'px';
+        d.style.top = Math.max(0, (window.innerHeight - c.height) / 2) + 'px';
+      };
+      window.onresize();
+      
+      Presentation = new SimplePresentation(c);
+      
+      // Initialize the editor
+      PresentationEditor.init(Presentation);
+      
+      // Auto-open the editor panel
+      setTimeout(function() {
+        var panel = document.getElementById('presentation-editor');
+        if (panel) {
+          panel.classList.add('open');
+        }
+      }, 500);
+    }
+  </script>
+  <style>
+    * { margin: 0px; padding: 0px; }
+    body {
+      font-size: 12px;
+      font-family: Arial, Helvetica;
+      background: #222222;
+      color: #828292;
+      overflow: hidden;
+    }
+    
+    #screen {
+      cursor: default;
+      display: block;
+      overflow: hidden;
+      position: absolute;
+      z-index: 1;
+      background: #DFD8CF;
+    }
+    
+    .welcome-text {
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    }
+  </style>
+</head>
+<body spellcheck="false">
+  <script type="text/javascript">init()</script>
+</body>
+</html>
