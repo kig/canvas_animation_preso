@@ -1,0 +1,78 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HTML5 Canvas Animation (JSON-driven)</title>
+  <meta http-equiv="X-UA-Compatible" content="chrome=1">
+  <script type="text/javascript" src="src/cake.js"></script>
+  <script type="text/javascript" src="src/support.js"></script>
+  <script type="text/javascript" src="src/presentation.js"></script>
+  <script type="text/javascript" src="src/animation-runner.js"></script>
+  <style>
+    * { margin: 0px; padding: 0px; }
+    body {
+      font-size: 12px;
+      font-family: Arial, Helvetica;
+      background: #222222;
+      color: #828292;
+    }
+    #screen {
+      cursor: default;
+      display: block;
+      overflow: hidden;
+      position: absolute;
+      z-index: 1;
+      background: #DFD8CF;
+      background-image: url(trees2.jpg);
+      background-position: left bottom;
+    }
+    .banner {
+      background: #4CAF50;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      font-weight: bold;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body spellcheck="false">
+  <div class="banner">✓ JSON-Driven Presentation (using animation-runner.js)</div>
+  
+  <script type="text/javascript">
+    /**
+     * JSON-driven presentation loader
+     * This demonstrates the optimal architecture: loading from presentation.json
+     */
+    (function() {
+      // Fetch and load presentation from JSON
+      fetch('presentation.json')
+        .then(function(response) {
+          return response.json();
+        })
+        .then(function(presentationData) {
+          // Create canvas element
+          var canvas = document.createElement('canvas');
+          canvas.id = 'screen';
+          canvas.width = presentationData.settings.width || 1024;
+          canvas.height = presentationData.settings.height || 768;
+          document.body.appendChild(canvas);
+          
+          // Load presentation using animation-runner
+          var instance = AnimationRunner.loadPresentation(presentationData, canvas);
+          
+          console.log('Presentation loaded from JSON:', instance);
+          console.log('Characters:', Object.keys(instance.characters));
+        })
+        .catch(function(error) {
+          console.error('Failed to load presentation:', error);
+          document.body.innerHTML = '<div style="color: red; padding: 20px;">Failed to load presentation.json. Error: ' + error.message + '</div>';
+        });
+    })();
+  </script>
+</body>
+</html>

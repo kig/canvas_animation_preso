@@ -1,11 +1,28 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>HTML5 Canvas Animation</title>
+  <title>Presentation Editor - HTML5 Canvas Animation</title>
   <meta http-equiv="X-UA-Compatible" content="chrome=1">
   <script type="text/javascript" src="src/cake.js"></script>
   <script type="text/javascript" src="src/support.js"></script>
   <script type="text/javascript" src="src/presentation.js"></script>
+  <script type="text/javascript" src="src/animation-runner.js"></script>
+  <script type="text/javascript" src="src/editor.js"></script>
+  <script type="text/javascript">
+    // Initialize editor after presentation loads
+    window.addEventListener('load', function() {
+      if (window.Presentation) {
+        PresentationEditor.init(Presentation);
+        // Auto-open the editor
+        setTimeout(function() {
+          var panel = document.getElementById('presentation-editor');
+          if (panel) {
+            panel.classList.add('open');
+          }
+        }, 500);
+      }
+    });
+  </script>
   <style>
     * { margin: 0px; padding: 0px; }
     body {

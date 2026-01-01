@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Presentation Player - HTML5 Canvas Animation</title>
+  <meta http-equiv="X-UA-Compatible" content="chrome=1">
+  <script type="text/javascript" src="src/cake.js"></script>
+  <script type="text/javascript" src="src/support.js"></script>
+  <script type="text/javascript" src="src/presentation.js"></script>
+  <script type="text/javascript" src="src/animation-runner.js"></script>
+  <script type="text/javascript">
+    var Presentation = null;
+    
+    function loadPresentationJSON(url) {
+      fetch(url)
+        .then(response => response.json())
+        .then(json => {
+          initPresentation(json);
+        })
+        .catch(error => {
+          console.error('Error loading presentation:', error);
+          alert('Failed to load presentation: ' + error.message);
+        });
+    }
+    
+    function initPresentation(json) {
+      if (!CanvasSupport.isCanvasSupported()) {
+        alert('Canvas is not supported in this browser');
+        return false;
+      }
+      
+      var settings = json.settings || {};
+      var iw = window.innerWidth / (settings.width || 1024);
+      var ih = window.innerHeight / (settings.height || 768);
+      var scale = Math.min(1, Math.min(iw, ih));
+      var c = E.canvas(scale * (settings.width || 1024), scale * (settings.height || 768));
+      var d = E('div', { id: 'screen' });
+      
+      d.appendChild(c);
+      
+      // Remove existing screen if any
+      var existing = document.getElementById('screen');
+      if (existing) {
+        existing.parentNode.removeChild(existing);
+      }
+      
+      document.body.appendChild(d);
+      
+      window.onresize = function() {
+        d.style.left = Math.max(0, (window.innerWidth - c.width) / 2) + 'px';
+        d.style.top = Math.max(0, (window.innerHeight - c.height) / 2) + 'px';
+      };
+      window.onresize();
+      
+      // Load presentation using animation runner
+      Presentation = AnimationRunner.loadPresentation(json, c);
+      
+      // Show controls
+      document.getElementById('controls').style.display = 'block';
+      document.getElementById('presentationTitle').textContent = json.title || 'Presentation';
+    }
+    
+    function playPresentation() {
+      if (Presentation && Presentation.canvas) {
+        Presentation.canvas.play();
+      }
+    }
+    
+    function stopPresentation() {
+      if (Presentation && Presentation.canvas) {
+        Presentation.canvas.stop();
+      }
+    }
+    
+    function restartPresentation() {
+      window.location.reload();
+    }
+    
+    function loadFromFile() {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (file) {
+          var reader = new FileReader();
+          reader.onload = function(event) {
+            try {
+              var json = JSON.parse(event.target.result);
+              initPresentation(json);
+            } catch (error) {
+              alert('Error parsing JSON: ' + error.message);
+            }
+          };
+          reader.readAsText(file);
+        }
+      });
+      input.click();
+    }
+    
+    // Auto-load default presentation
+    window.addEventListener('load', function() {
+      var urlParams = new URLSearchParams(window.location.search);
+      var jsonUrl = urlParams.get('presentation') || 'presentation.json';
+      loadPresentationJSON(jsonUrl);
+    });
+  </script>
+  <style>
+    * { margin: 0px; padding: 0px; }
+    body {
+      font-size: 12px;
+      font-family: Arial, Helvetica;
+      background: #222222;
+      color: #828292;
+      overflow: hidden;
+    }
+    
+    #screen {
+      cursor: default;
+      display: block;
+      overflow: hidden;
+      position: absolute;
+      z-index: 1;
+      background: #DFD8CF;
+      background-image: url(trees2.jpg);
+      background-position: left bottom;
+    }
+    
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px;
+      border-radius: 5px;
+      display: none;
+    }
+    
+    #controls h2 {
+      color: #fff;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    
+    #controls button {
+      background: #4CAF50;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px 5px 5px 0;
+      font-size: 13px;
+    }
+    
+    #controls button:hover {
+      background: #45a049;
+    }
+    
+    #loader {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      padding: 30px;
+      border-radius: 8px;
+      text-align: center;
+      color: #fff;
+      z-index: 2000;
+    }
+    
+    #loader h1 {
+      color: #fff;
+      margin-bottom: 20px;
+    }
+    
+    #loader button {
+      background: #4CAF50;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px;
+      font-size: 14px;
+    }
+    
+    #loader button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body spellcheck="false">
+  <div id="loader">
+    <h1>Presentation Player</h1>
+    <p>Loading presentation...</p>
+    <div style="margin-top: 20px;">
+      <button onclick="loadFromFile()">Load JSON File</button>
+    </div>
+  </div>
+  
+  <div id="controls">
+    <h2 id="presentationTitle">Presentation</h2>
+    <div>
+      <button onclick="playPresentation()">Play</button>
+      <button onclick="stopPresentation()">Stop</button>
+      <button onclick="restartPresentation()">Restart</button>
+      <button onclick="loadFromFile()">Load JSON</button>
+    </div>
+  </div>
+</body>
+</html>

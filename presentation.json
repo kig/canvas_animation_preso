@@ -1,0 +1,98 @@
+{
+  "title": "Canvas Animation Presentation",
+  "settings": {
+    "frameDuration": 30,
+    "fixedTimestep": true,
+    "clear": true,
+    "playOnlyWhenFocused": false,
+    "width": 1024,
+    "height": 768
+  },
+  "background": {
+    "type": "image",
+    "src": "trees2.jpg",
+    "zIndex": -1,
+    "visible": false
+  },
+  "characters": [
+    {
+      "name": "tomte",
+      "type": "Tomte",
+      "position": { "x": 0, "y": 0 },
+      "sprites": {
+        "head": "tomte_sprite/head.png",
+        "torso_front": "tomte_sprite/torso_front.png",
+        "left_foot": "tomte_sprite/left_foot.png",
+        "right_foot": "tomte_sprite/right_foot.png",
+        "left_hand": "tomte_sprite/left_hand.png",
+        "right_hand": "tomte_sprite/right_hand.png",
+        "mouth": "tomte_sprite/mouth.png",
+        "eyeball": "tomte_sprite/eyeball.png",
+        "shadow": "tomte_sprite/shadow.png"
+      }
+    },
+    {
+      "name": "goat",
+      "type": "Goat",
+      "position": { "x": 0, "y": 0 },
+      "sprites": {
+        "head": "goat_sprite/head.png",
+        "torso": "goat_sprite/torso.png",
+        "left_foot": "goat_sprite/left_foot.png",
+        "right_foot": "goat_sprite/right_foot.png",
+        "shadow": "goat_sprite/shadow.png"
+      }
+    }
+  ],
+  "timeline": {
+    "tomte": [
+      { "method": "wait", "params": [100] },
+      { "method": "isOffscreenRight", "params": [] },
+      { "method": "plain", "params": [] },
+      { "method": "lookLeft", "params": [] },
+      { "method": "walkTo", "params": [700, 690] },
+      { "method": "lookFront", "params": [] },
+      { "method": "smile", "params": [] },
+      { "method": "wave", "params": [] },
+      { "method": "headDownLeft", "params": [] },
+      { "method": "say", "params": ["Hi, I'm Tomte!", "tomte_hi"] },
+      { "method": "headLevel", "params": [] },
+      { "method": "lookLeft", "params": [] },
+      { "method": "plain", "params": [] },
+      { "method": "wait", "params": [6000] },
+      { "method": "waitFor", "params": ["goat2"] },
+      { "method": "wagamama", "params": [] },
+      { "method": "headUpLeft", "params": [] },
+      { "method": "say", "params": ["You tell them!"] },
+      { "method": "headLevel", "params": [] },
+      { "method": "lookBottomRight", "params": [] },
+      { "method": "triumphant", "params": [] },
+      { "method": "lookRight", "params": [] },
+      { "method": "takeOutMagicWand", "params": [] },
+      { "method": "headDownLeft", "params": [] },
+      { "method": "lookFront", "params": [] },
+      { "method": "say", "params": ["I have a magic wand.", "tomte_wand"] },
+      { "method": "lookLeft", "params": [] },
+      { "method": "headLevel", "params": [] },
+      { "method": "wait", "params": [4000] }
+    ],
+    "goat": [
+      { "method": "wait", "params": [100] },
+      { "method": "isOffscreenLeft", "params": [] },
+      { "method": "plain", "params": [] },
+      { "method": "walkTo", "params": [324, 580] },
+      { "method": "wait", "params": [3000] },
+      { "method": "smile", "params": [] },
+      { "method": "wave", "params": [] },
+      { "method": "say", "params": ["And I'm Goat!"] },
+      { "method": "lookUp", "params": [] },
+      { "method": "say", "params": ["We're here to tell you about HTML5 Canvas animation.", "goat2"] },
+      { "method": "lookDown", "params": [] },
+      { "method": "plain", "params": [] },
+      { "method": "wait", "params": [4000] },
+      { "method": "uuu", "params": [] },
+      { "method": "waitFor", "params": ["tomte_wand"] },
+      { "method": "wait", "params": [4500] }
+    ]
+  }
+}
