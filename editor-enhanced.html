@@ -1,0 +1,176 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Enhanced Presentation Editor - HTML5 Canvas Animation</title>
+  <meta http-equiv="X-UA-Compatible" content="chrome=1">
+  <script type="text/javascript" src="src/cake.js"></script>
+  <script type="text/javascript" src="src/support.js"></script>
+  <script type="text/javascript" src="src/presentation.js"></script>
+  <script type="text/javascript" src="src/animation-runner.js"></script>
+  <script type="text/javascript" src="src/editor-enhanced.js"></script>
+  <script type="text/javascript">
+    // Initialize enhanced editor after presentation loads
+    window.addEventListener('load', function() {
+      if (window.Presentation) {
+        PresentationEditorEnhanced.init(Presentation);
+        // Auto-open the editor
+        setTimeout(function() {
+          var panel = document.getElementById('presentation-editor');
+          if (panel) {
+            panel.classList.add('open');
+          }
+        }, 500);
+      }
+    });
+  </script>
+  <style>
+    * { margin: 0px; padding: 0px; }
+    body {
+      font-size: 12px;
+      font-family: Arial, Helvetica;
+      background: #222222;
+      color: #828292;
+    }
+    a {
+      color: #8282c2;
+    }
+    h1 {
+      color: #727282;
+      letter-spacing: 20px;
+      margin-left: 10px;
+      font-size: 16px;
+    }
+    h2 {
+      color: #727282;
+      letter-spacing: 18px;
+      margin-left: 9px;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    h3 {
+      font-size: 14px;
+      font-family: Trebuchet MS, Arial, Helvetica;
+      color: #827262;
+      margin-left: 4px;
+    }
+
+    #canvasAnim {
+      font-size: 120px;
+      font-weight: bold;
+      white-space: nowrap;
+      font-family: Trebuchet MS;
+      color: #ffffff;
+      text-shadow: 2px 2px 10px #000;
+    }
+    #html5 {
+      font-size: 50px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      opacity: 0.8;
+      color: #fff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.8);
+    }
+    #clickIt {
+      cursor: pointer;
+      font-size: 80px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      text-align: center;
+      color: #ffffff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.8);
+    }
+    .theEnd {
+      font-size: 220px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      color: #ffffff;
+      text-shadow: 2px 2px 10px #000;
+    }
+    .speechbubble {
+      padding: 20px;
+      background-color: #FFF8EF;
+      -moz-border-radius: 16px;
+      -moz-box-shadow: 2px 2px 10px #000;
+      border-radius: 16px;
+      box-shadow: 2px 2px 10px #000;
+      font-size: 20px;
+      font-weight: bold;
+      font-family: Trebuchet MS;
+      text-align: center;
+      max-width: 400px;
+    }
+    
+    .message h1, .message h2 {
+      margin-left: 0px;
+      letter-spacing: 0px;
+      margin-bottom: 20px;
+    }
+    .message div {
+      margin-bottom: 50px;
+    }
+    div.message {
+      width: 360px;
+    }
+    .message {
+      text-align: center;
+      color: #827262;
+      font-size: 12px;
+    }
+    input {
+      margin-right : 4px;
+    }
+    #debug p {
+      margin-bottom: 4px;
+    }
+    #debug div {
+      margin-bottom: 8px;
+    }
+    #screen {
+      cursor: default;
+      display: block;
+      overflow: hidden;
+      position: absolute;
+      z-index: 1;
+      background: #DFD8CF;
+      background-image: url(trees2.jpg);
+      background-position: left bottom;
+    }
+    #debug {
+      color: #828292;
+      background-color: rgba(0,0,0,0.8);
+      padding: 10px;
+      font-size: 12px;
+      position: absolute;
+      z-index: 2;
+      left: 32px;
+      max-width: 300px;
+      top: 0px;
+      display: none;
+    }
+    #debugtoggle {
+      position: absolute;
+      font-family: monospace;
+      color: #827262;
+      z-index: 2;
+      left: 8px;
+      top: 8px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body spellcheck="false">
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/chrome-frame/1/CFInstall.min.js"> </script>
+  <div id="debug">
+  </div>
+  <div id="placeholder">
+  </div>
+ 
+<script>
+ CFInstall.check({ node: "placeholder" });
+</script>
+
+  <div id="debugtoggle" onclick="toggleDebug()">[+]</div>
+  <script type="text/javascript">init()</script>
+</body>
+</html>

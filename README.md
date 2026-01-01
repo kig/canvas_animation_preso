@@ -34,10 +34,12 @@ canvas_animation_preso/
 │   ├── support.js            # Support utilities
 │   ├── presentation.js       # Character classes and presentation logic
 │   ├── animation-runner.js   # JSON presentation execution library
-│   └── editor.js             # Timeline editor implementation
+│   ├── editor.js             # Timeline editor implementation
+│   └── editor-enhanced.js    # Enhanced editor with undo/redo & live preview ✨ NEW
 ├── index.html                # Original presentation (hardcoded)
 ├── index-json.html           # JSON-driven presentation (optimal) ✨
 ├── editor.html               # Visual timeline editor
+├── editor-enhanced.html      # Enhanced editor interface ✨ NEW
 ├── player.html               # JSON presentation player
 ├── tests.html                # Property-based test suite
 ├── presentation.json         # Example JSON presentation
@@ -89,6 +91,46 @@ Visual two-column editor for creating character animation sequences:
 - **Custom actions** - Write your own JavaScript functions
 - **JSON export/import** - Save and load presentations
 - **Live editing** - Click rows to modify actions
+
+### Enhanced Timeline Editor ✨ NEW
+
+Advanced editor with undo/redo and live preview capabilities:
+
+- **Undo/Redo System** - Command pattern implementation with 50-level history
+  - `Ctrl+Z` to undo
+  - `Ctrl+Y` or `Ctrl+Shift+Z` to redo
+  - Visual indicators showing undo/redo stack size
+  - All operations supported: add row, delete row, edit action, add sync point
+
+- **Live Preview Canvas** - Real-time character animation preview
+  - Integrated 512x384 preview canvas
+  - Instant visual feedback as you edit
+  - Separate from main presentation
+
+- **Timeline Seeking** - Scrub through timeline with visual seeker
+  - Slider control to jump to any row
+  - Shows current position (e.g., "Position: 5 / 12")
+  - Click timeline rows to seek
+  - Characters update to reflect state at that position
+
+- **Playback Controls** - Play/pause timeline preview
+  - "Play Preview" button to animate through timeline
+  - Automatic advancement every 500ms
+  - "Pause Preview" to stop
+  - "Reset Preview" to jump back to start
+
+- **Keyboard Shortcuts**
+  - `Space` - Play/Pause preview
+  - `←` / `→` - Navigate previous/next row
+  - `Ctrl+Z` - Undo
+  - `Ctrl+Y` - Redo
+
+**Usage:**
+```bash
+open editor-enhanced.html
+```
+
+The enhanced editor provides a professional editing experience with full undo/redo support and real-time visual feedback, making it easy to create and refine complex character animations.
 
 ### Animation Runner
 
