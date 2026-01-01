@@ -1,7 +1,7 @@
 /*
   Presentation Script Editor for Canvas Animation
   
-  Allows editing the animation scripts for Tomte and Goat characters
+  Unified two-column timeline editor with sync points and custom action support
 */
 
 var PresentationEditor = (function() {
@@ -9,8 +9,9 @@ var PresentationEditor = (function() {
   
   var editor = {
     presentation: null,
-    scriptCommands: [],
-    currentCommandIndex: -1,
+    timeline: [],
+    currentRowIndex: -1,
+    customActions: {},
     
     /**
      * Initialize the editor
@@ -23,7 +24,7 @@ var PresentationEditor = (function() {
     },
     
     /**
-     * Setup the editor UI
+     * Setup the editor UI with two-column timeline
      */
     setupUI: function() {
       var editorPanel = document.createElement('div');
@@ -31,25 +32,38 @@ var PresentationEditor = (function() {
       editorPanel.className = 'editor-panel';
       editorPanel.innerHTML = `
         <div class="editor-header">
-          <h2>Animation Script Editor</h2>
+          <h2>Animation Timeline Editor</h2>
           <button id="toggle-editor" class="btn">Toggle Editor</button>
         </div>
         <div class="editor-content">
           <div class="editor-section">
-            <h3>Script Commands</h3>
-            <div class="char-tabs">
-              <button id="tab-tomte" class="tab-btn active">Tomte</button>
-              <button id="tab-goat" class="tab-btn">Goat</button>
+            <h3>Timeline (Two-Column View)</h3>
+            <div class="timeline-container">
+              <div class="timeline-header">
+                <div class="timeline-col">Tomte</div>
+                <div class="timeline-col">Goat</div>
+              </div>
+              <div id="timeline-rows" class="timeline-rows"></div>
             </div>
-            <div id="commands-list" class="commands-list"></div>
-            <button id="add-command" class="btn">Add Command</button>
+            <div class="timeline-controls">
+              <button id="add-row" class="btn">Add Row</button>
+              <button id="add-sync" class="btn">Add Sync Point</button>
+            </div>
           </div>
           <div class="editor-section">
-            <h3>Edit Command</h3>
-            <div id="command-editor" class="command-editor">
+            <h3>Edit Action</h3>
+            <div id="action-editor" class="action-editor">
               <label>
-                Command Type:
-                <select id="command-type" class="form-control">
+                Column:
+                <select id="action-column" class="form-control">
+                  <option value="tomte">Tomte</option>
+                  <option value="goat">Goat</option>
+                  <option value="sync">Sync Point</option>
+                </select>
+              </label>
+              <label>
+                Action Type:
+                <select id="action-type" class="form-control">
                   <optgroup label="Movement">
                     <option value="walkTo">Walk To</option>
                     <option value="isOffscreenLeft">Start Offscreen Left</option>
@@ -70,6 +84,7 @@ var PresentationEditor = (function() {
                   </optgroup>
                   <optgroup label="Timing">
                     <option value="wait">Wait</option>
+                    <option value="waitFor">Wait For (Sync)</option>
                   </optgroup>
                   <optgroup label="Head">
                     <option value="lookLeft">Look Left</option>
@@ -84,11 +99,29 @@ var PresentationEditor = (function() {
                     <option value="takeOutMagicWand">Take Out Magic Wand</option>
                     <option value="putAwayMagicWand">Put Away Magic Wand</option>
                   </optgroup>
+                  <optgroup label="Custom">
+                    <option value="custom">Custom Action</option>
+                  </optgroup>
                 </select>
               </label>
-              <div id="command-params" class="command-params"></div>
-              <button id="save-command" class="btn">Save Command</button>
-              <button id="delete-command" class="btn btn-danger">Delete Command</button>
+              <div id="action-params" class="action-params"></div>
+              <button id="save-action" class="btn">Save Action</button>
+              <button id="delete-action" class="btn btn-danger">Delete Action</button>
+            </div>
+          </div>
+          <div class="editor-section">
+            <h3>Custom Actions</h3>
+            <div class="custom-actions-section">
+              <label>
+                Action Name:
+                <input type="text" id="custom-action-name" class="form-control" placeholder="myCustomAction" />
+              </label>
+              <label>
+                Action Code:
+                <textarea id="custom-action-code" class="form-control code-editor" rows="5" placeholder="function() { /* your code */ }"></textarea>
+              </label>
+              <button id="save-custom-action" class="btn">Save Custom Action</button>
+              <div id="custom-actions-list" class="custom-actions-list"></div>
             </div>
           </div>
           <div class="editor-section">
@@ -117,8 +150,8 @@ var PresentationEditor = (function() {
         .editor-panel {
           position: fixed;
           top: 0;
-          right: -400px;
-          width: 400px;
+          right: -500px;
+          width: 500px;
           height: 100%;
           background: rgba(0, 0, 0, 0.95);
           color: #fff;
@@ -128,6 +161,7 @@ var PresentationEditor = (function() {
           transition: right 0.3s ease;
           z-index: 1000;
           font-family: Arial, sans-serif;
+          font-size: 13px;
         }
         
         .editor-panel.open {
@@ -147,24 +181,24 @@ var PresentationEditor = (function() {
         }
         
         .editor-section {
-          margin-bottom: 30px;
+          margin-bottom: 25px;
         }
         
         .editor-section h3 {
           color: #fff;
           margin-bottom: 10px;
-          font-size: 16px;
+          font-size: 15px;
         }
         
         .btn {
           background: #4CAF50;
           color: white;
-          padding: 8px 16px;
+          padding: 6px 12px;
           border: none;
           border-radius: 4px;
           cursor: pointer;
-          margin: 5px 5px 5px 0;
-          font-size: 14px;
+          margin: 4px 4px 4px 0;
+          font-size: 13px;
         }
         
         .btn:hover {
@@ -181,136 +215,236 @@ var PresentationEditor = (function() {
         
         .form-control {
           width: 100%;
-          padding: 8px;
-          margin: 5px 0 15px 0;
+          padding: 6px;
+          margin: 5px 0 12px 0;
           background: #333;
           border: 1px solid #555;
           color: #fff;
           border-radius: 4px;
-        }
-        
-        .commands-list {
-          max-height: 300px;
-          overflow-y: auto;
-          margin-bottom: 10px;
-          background: #222;
-          border: 1px solid #444;
-          border-radius: 4px;
-        }
-        
-        .command-item {
-          padding: 8px 12px;
-          margin: 0;
-          background: #333;
-          border-bottom: 1px solid #444;
-          cursor: pointer;
           font-size: 13px;
         }
         
-        .command-item:hover {
-          background: #444;
+        .code-editor {
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
         }
         
-        .command-item.active {
-          background: #4CAF50;
-        }
-        
-        .char-tabs {
-          display: flex;
+        .timeline-container {
+          background: #222;
+          border: 1px solid #444;
+          border-radius: 4px;
           margin-bottom: 10px;
         }
         
-        .tab-btn {
-          flex: 1;
-          padding: 8px;
-          background: #333;
-          color: #fff;
-          border: 1px solid #555;
-          cursor: pointer;
-          font-size: 14px;
+        .timeline-header {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1px;
+          background: #555;
+          font-weight: bold;
+          text-align: center;
         }
         
-        .tab-btn.active {
+        .timeline-col {
+          padding: 8px;
+          background: #333;
+        }
+        
+        .timeline-rows {
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        
+        .timeline-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1px;
+          background: #444;
+          border-bottom: 1px solid #444;
+          cursor: pointer;
+        }
+        
+        .timeline-row:hover {
+          background: #555;
+        }
+        
+        .timeline-row.active {
           background: #4CAF50;
         }
         
-        .tab-btn:hover {
-          background: #444;
+        .timeline-row.sync-row {
+          grid-template-columns: 1fr;
+          background: #5555ff;
+        }
+        
+        .timeline-cell {
+          padding: 6px 8px;
+          background: #333;
+          min-height: 30px;
+          font-size: 12px;
+        }
+        
+        .timeline-cell.sync-cell {
+          background: #4444dd;
+          text-align: center;
+          font-weight: bold;
+        }
+        
+        .timeline-cell.empty {
+          opacity: 0.5;
+        }
+        
+        .timeline-controls {
+          display: flex;
+          gap: 5px;
         }
         
         .controls {
           display: flex;
           flex-wrap: wrap;
+          gap: 5px;
         }
         
         label {
           display: block;
           margin-bottom: 10px;
-          font-size: 14px;
+          font-size: 13px;
         }
         
-        .command-params {
-          margin: 15px 0;
+        .action-params {
+          margin: 12px 0;
         }
         
-        .command-params label {
-          margin-bottom: 15px;
+        .action-params label {
+          margin-bottom: 12px;
+        }
+        
+        .custom-actions-list {
+          margin-top: 10px;
+          max-height: 150px;
+          overflow-y: auto;
+        }
+        
+        .custom-action-item {
+          padding: 6px;
+          background: #333;
+          margin: 3px 0;
+          border-radius: 3px;
+          font-size: 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .custom-action-item .btn {
+          padding: 3px 8px;
+          font-size: 11px;
+          margin: 0;
         }
       `;
       document.head.appendChild(style);
     },
     
     /**
-     * Parse the presentation script
+     * Parse the presentation script into timeline format
      */
     parseScript: function() {
-      // For now, we'll work with a simplified command structure
-      // Users can add/edit commands which will modify the playScript function
-      this.tomteCommands = [
-        { type: 'wait', params: [100] },
-        { type: 'isOffscreenRight', params: [] },
-        { type: 'plain', params: [] },
-        { type: 'walkTo', params: [700, 690] },
-        { type: 'say', params: ["Hi, I'm Tomte!"] }
+      // Initialize with example timeline - unified two-column structure
+      this.timeline = [
+        { type: 'row', tomte: { type: 'wait', params: [100] }, goat: { type: 'wait', params: [100] } },
+        { type: 'row', tomte: { type: 'isOffscreenRight', params: [] }, goat: { type: 'isOffscreenLeft', params: [] } },
+        { type: 'row', tomte: { type: 'plain', params: [] }, goat: { type: 'plain', params: [] } },
+        { type: 'row', tomte: { type: 'walkTo', params: [700, 690] }, goat: { type: 'walkTo', params: [324, 580] } },
+        { type: 'row', tomte: { type: 'say', params: ["Hi, I'm Tomte!"] }, goat: { type: 'say', params: ["And I'm Goat!"] } },
+        { type: 'sync', label: 'goat2', tomte: { type: 'waitFor', params: ['goat2'] }, goat: null }
       ];
       
-      this.goatCommands = [
-        { type: 'wait', params: [100] },
-        { type: 'isOffscreenLeft', params: [] },
-        { type: 'plain', params: [] },
-        { type: 'walkTo', params: [324, 580] },
-        { type: 'say', params: ["And I'm Goat!"] }
-      ];
-      
-      this.currentCharacter = 'tomte';
-      this.renderCommandsList();
+      this.renderTimeline();
     },
     
     /**
-     * Render commands list
+     * Render the timeline view
      */
-    renderCommandsList: function() {
-      var commandsList = document.getElementById('commands-list');
-      if (!commandsList) return;
+    renderTimeline: function() {
+      var timelineRows = document.getElementById('timeline-rows');
+      if (!timelineRows) return;
       
-      var commands = this.currentCharacter === 'tomte' ? this.tomteCommands : this.goatCommands;
-      commandsList.innerHTML = '';
+      timelineRows.innerHTML = '';
       
-      commands.forEach(function(cmd, index) {
-        var item = document.createElement('div');
-        item.className = 'command-item';
-        if (index === this.currentCommandIndex) {
-          item.className += ' active';
+      this.timeline.forEach(function(row, index) {
+        var rowDiv = document.createElement('div');
+        
+        if (row.type === 'sync') {
+          rowDiv.className = 'timeline-row sync-row';
+          if (index === this.currentRowIndex) {
+            rowDiv.className += ' active';
+          }
+          var syncCell = document.createElement('div');
+          syncCell.className = 'timeline-cell sync-cell';
+          syncCell.textContent = '⚡ SYNC: ' + (row.label || 'unnamed');
+          rowDiv.appendChild(syncCell);
+        } else {
+          rowDiv.className = 'timeline-row';
+          if (index === this.currentRowIndex) {
+            rowDiv.className += ' active';
+          }
+          
+          // Tomte column
+          var tomteCell = document.createElement('div');
+          tomteCell.className = 'timeline-cell';
+          if (row.tomte) {
+            var text = row.tomte.type;
+            if (row.tomte.params && row.tomte.params.length > 0) {
+              text += '(' + row.tomte.params.join(', ') + ')';
+            }
+            tomteCell.textContent = text;
+          } else {
+            tomteCell.className += ' empty';
+            tomteCell.textContent = '—';
+          }
+          rowDiv.appendChild(tomteCell);
+          
+          // Goat column
+          var goatCell = document.createElement('div');
+          goatCell.className = 'timeline-cell';
+          if (row.goat) {
+            var text = row.goat.type;
+            if (row.goat.params && row.goat.params.length > 0) {
+              text += '(' + row.goat.params.join(', ') + ')';
+            }
+            goatCell.textContent = text;
+          } else {
+            goatCell.className += ' empty';
+            goatCell.textContent = '—';
+          }
+          rowDiv.appendChild(goatCell);
         }
         
-        var text = cmd.type;
-        if (cmd.params && cmd.params.length > 0) {
-          text += '(' + cmd.params.join(', ') + ')';
-        }
-        item.textContent = (index + 1) + '. ' + text;
-        item.dataset.index = index;
-        commandsList.appendChild(item);
+        rowDiv.dataset.index = index;
+        timelineRows.appendChild(rowDiv);
       }.bind(this));
+      
+      this.renderCustomActions();
+    },
+    
+    /**
+     * Render custom actions list
+     */
+    renderCustomActions: function() {
+      var list = document.getElementById('custom-actions-list');
+      if (!list) return;
+      
+      list.innerHTML = '';
+      
+      for (var name in this.customActions) {
+        var item = document.createElement('div');
+        item.className = 'custom-action-item';
+        item.innerHTML = `
+          <span>${name}</span>
+          <button class="btn btn-danger delete-custom-action" data-name="${name}">Delete</button>
+        `;
+        list.appendChild(item);
+      }
     },
     
     /**
@@ -328,72 +462,82 @@ var PresentationEditor = (function() {
         });
       }
       
-      // Character tabs
-      var tomteTab = document.getElementById('tab-tomte');
-      var goatTab = document.getElementById('tab-goat');
-      
-      if (tomteTab) {
-        tomteTab.addEventListener('click', function() {
-          self.currentCharacter = 'tomte';
-          this.classList.add('active');
-          goatTab.classList.remove('active');
-          self.currentCommandIndex = -1;
-          self.renderCommandsList();
-          self.clearCommandEditor();
-        });
-      }
-      
-      if (goatTab) {
-        goatTab.addEventListener('click', function() {
-          self.currentCharacter = 'goat';
-          this.classList.add('active');
-          tomteTab.classList.remove('active');
-          self.currentCommandIndex = -1;
-          self.renderCommandsList();
-          self.clearCommandEditor();
-        });
-      }
-      
-      // Command selection
-      var commandsList = document.getElementById('commands-list');
-      if (commandsList) {
-        commandsList.addEventListener('click', function(e) {
-          if (e.target.classList.contains('command-item')) {
-            var index = parseInt(e.target.dataset.index);
-            self.selectCommand(index);
+      // Timeline row selection
+      var timelineRows = document.getElementById('timeline-rows');
+      if (timelineRows) {
+        timelineRows.addEventListener('click', function(e) {
+          var row = e.target.closest('.timeline-row');
+          if (row) {
+            var index = parseInt(row.dataset.index);
+            self.selectRow(index);
           }
         });
       }
       
-      // Add command
-      var addBtn = document.getElementById('add-command');
-      if (addBtn) {
-        addBtn.addEventListener('click', function() {
-          self.addCommand();
+      // Add row
+      var addRowBtn = document.getElementById('add-row');
+      if (addRowBtn) {
+        addRowBtn.addEventListener('click', function() {
+          self.addRow();
         });
       }
       
-      // Save command
-      var saveBtn = document.getElementById('save-command');
-      if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-          self.saveCommand();
+      // Add sync point
+      var addSyncBtn = document.getElementById('add-sync');
+      if (addSyncBtn) {
+        addSyncBtn.addEventListener('click', function() {
+          self.addSyncPoint();
         });
       }
       
-      // Delete command
-      var deleteBtn = document.getElementById('delete-command');
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', function() {
-          self.deleteCommand();
+      // Save action
+      var saveActionBtn = document.getElementById('save-action');
+      if (saveActionBtn) {
+        saveActionBtn.addEventListener('click', function() {
+          self.saveAction();
         });
       }
       
-      // Command type change
-      var typeSelect = document.getElementById('command-type');
-      if (typeSelect) {
-        typeSelect.addEventListener('change', function() {
-          self.updateCommandParams();
+      // Delete action
+      var deleteActionBtn = document.getElementById('delete-action');
+      if (deleteActionBtn) {
+        deleteActionBtn.addEventListener('click', function() {
+          self.deleteAction();
+        });
+      }
+      
+      // Action type change
+      var actionTypeSelect = document.getElementById('action-type');
+      if (actionTypeSelect) {
+        actionTypeSelect.addEventListener('change', function() {
+          self.updateActionParams();
+        });
+      }
+      
+      // Column change
+      var columnSelect = document.getElementById('action-column');
+      if (columnSelect) {
+        columnSelect.addEventListener('change', function() {
+          self.updateActionParams();
+        });
+      }
+      
+      // Custom action save
+      var saveCustomBtn = document.getElementById('save-custom-action');
+      if (saveCustomBtn) {
+        saveCustomBtn.addEventListener('click', function() {
+          self.saveCustomAction();
+        });
+      }
+      
+      // Custom action delete (delegated event)
+      var customActionsList = document.getElementById('custom-actions-list');
+      if (customActionsList) {
+        customActionsList.addEventListener('click', function(e) {
+          if (e.target.classList.contains('delete-custom-action')) {
+            var name = e.target.dataset.name;
+            self.deleteCustomAction(name);
+          }
         });
       }
       
@@ -419,7 +563,6 @@ var PresentationEditor = (function() {
       var restartBtn = document.getElementById('restart-presentation');
       if (restartBtn) {
         restartBtn.addEventListener('click', function() {
-          // Reload the page to restart
           window.location.reload();
         });
       }
@@ -441,48 +584,59 @@ var PresentationEditor = (function() {
     },
     
     /**
-     * Select a command
+     * Select a timeline row
      */
-    selectCommand: function(index) {
-      this.currentCommandIndex = index;
-      this.renderCommandsList();
-      this.loadCommandEditor();
+    selectRow: function(index) {
+      this.currentRowIndex = index;
+      this.renderTimeline();
+      this.loadActionEditor();
     },
     
     /**
-     * Load command into editor
+     * Load action into editor
      */
-    loadCommandEditor: function() {
-      var commands = this.currentCharacter === 'tomte' ? this.tomteCommands : this.goatCommands;
-      if (this.currentCommandIndex < 0 || this.currentCommandIndex >= commands.length) return;
+    loadActionEditor: function() {
+      if (this.currentRowIndex < 0 || this.currentRowIndex >= this.timeline.length) return;
       
-      var cmd = commands[this.currentCommandIndex];
-      document.getElementById('command-type').value = cmd.type;
-      this.updateCommandParams();
+      var row = this.timeline[this.currentRowIndex];
+      
+      if (row.type === 'sync') {
+        document.getElementById('action-column').value = 'sync';
+        document.getElementById('action-type').value = 'waitFor';
+      } else {
+        // Default to tomte if it has an action
+        if (row.tomte) {
+          document.getElementById('action-column').value = 'tomte';
+          document.getElementById('action-type').value = row.tomte.type;
+        } else if (row.goat) {
+          document.getElementById('action-column').value = 'goat';
+          document.getElementById('action-type').value = row.goat.type;
+        }
+      }
+      
+      this.updateActionParams();
       
       // Fill in parameter values
-      var params = document.querySelectorAll('.param-input');
-      cmd.params.forEach(function(param, i) {
-        if (params[i]) {
-          params[i].value = param;
-        }
-      });
+      var column = document.getElementById('action-column').value;
+      var action = row.type === 'sync' ? row.tomte : row[column];
+      
+      if (action && action.params) {
+        var params = document.querySelectorAll('.param-input');
+        action.params.forEach(function(param, i) {
+          if (params[i]) {
+            params[i].value = param;
+          }
+        });
+      }
     },
     
     /**
-     * Clear command editor
+     * Update action parameters UI
      */
-    clearCommandEditor: function() {
-      document.getElementById('command-type').value = 'wait';
-      this.updateCommandParams();
-    },
-    
-    /**
-     * Update command parameters UI based on selected type
-     */
-    updateCommandParams: function() {
-      var type = document.getElementById('command-type').value;
-      var paramsDiv = document.getElementById('command-params');
+    updateActionParams: function() {
+      var type = document.getElementById('action-type').value;
+      var column = document.getElementById('action-column').value;
+      var paramsDiv = document.getElementById('action-params');
       paramsDiv.innerHTML = '';
       
       var paramConfig = {
@@ -495,6 +649,12 @@ var PresentationEditor = (function() {
         ],
         'wait': [
           { name: 'duration', type: 'number', label: 'Duration (ms)' }
+        ],
+        'waitFor': [
+          { name: 'label', type: 'text', label: 'Sync Point Label' }
+        ],
+        'custom': [
+          { name: 'actionName', type: 'text', label: 'Custom Action Name' }
         ]
       };
       
@@ -512,25 +672,48 @@ var PresentationEditor = (function() {
     },
     
     /**
-     * Add new command
+     * Add new row
      */
-    addCommand: function() {
-      var commands = this.currentCharacter === 'tomte' ? this.tomteCommands : this.goatCommands;
-      var newCmd = { type: 'wait', params: [1000] };
-      commands.push(newCmd);
-      this.currentCommandIndex = commands.length - 1;
-      this.renderCommandsList();
-      this.loadCommandEditor();
+    addRow: function() {
+      var newRow = { 
+        type: 'row', 
+        tomte: { type: 'wait', params: [1000] }, 
+        goat: { type: 'wait', params: [1000] } 
+      };
+      this.timeline.push(newRow);
+      this.currentRowIndex = this.timeline.length - 1;
+      this.renderTimeline();
+      this.loadActionEditor();
     },
     
     /**
-     * Save current command
+     * Add sync point
      */
-    saveCommand: function() {
-      var commands = this.currentCharacter === 'tomte' ? this.tomteCommands : this.goatCommands;
-      if (this.currentCommandIndex < 0 || this.currentCommandIndex >= commands.length) return;
+    addSyncPoint: function() {
+      var label = prompt('Enter sync point label:', 'sync' + Date.now());
+      if (label) {
+        var newRow = { 
+          type: 'sync', 
+          label: label,
+          tomte: { type: 'waitFor', params: [label] },
+          goat: null
+        };
+        this.timeline.push(newRow);
+        this.currentRowIndex = this.timeline.length - 1;
+        this.renderTimeline();
+        this.loadActionEditor();
+      }
+    },
+    
+    /**
+     * Save current action
+     */
+    saveAction: function() {
+      if (this.currentRowIndex < 0 || this.currentRowIndex >= this.timeline.length) return;
       
-      var type = document.getElementById('command-type').value;
+      var row = this.timeline[this.currentRowIndex];
+      var column = document.getElementById('action-column').value;
+      var type = document.getElementById('action-type').value;
       var params = [];
       
       var inputs = document.querySelectorAll('.param-input');
@@ -539,23 +722,76 @@ var PresentationEditor = (function() {
         params.push(value);
       });
       
-      commands[this.currentCommandIndex] = { type: type, params: params };
-      this.renderCommandsList();
-      alert('Command saved! Note: Changes will take effect after restarting the presentation.');
+      if (column === 'sync') {
+        row.type = 'sync';
+        row.label = params[0] || 'unnamed';
+        row.tomte = { type: 'waitFor', params: params };
+        row.goat = null;
+      } else {
+        if (row.type === 'sync') {
+          row.type = 'row';
+        }
+        row[column] = { type: type, params: params };
+      }
+      
+      this.renderTimeline();
+      alert('Action saved! Restart presentation to see changes.');
     },
     
     /**
-     * Delete current command
+     * Delete current action
      */
-    deleteCommand: function() {
-      var commands = this.currentCharacter === 'tomte' ? this.tomteCommands : this.goatCommands;
-      if (this.currentCommandIndex < 0 || this.currentCommandIndex >= commands.length) return;
+    deleteAction: function() {
+      if (this.currentRowIndex < 0 || this.currentRowIndex >= this.timeline.length) return;
       
-      if (confirm('Delete this command?')) {
-        commands.splice(this.currentCommandIndex, 1);
-        this.currentCommandIndex = -1;
-        this.renderCommandsList();
-        this.clearCommandEditor();
+      if (confirm('Delete this row?')) {
+        this.timeline.splice(this.currentRowIndex, 1);
+        this.currentRowIndex = -1;
+        this.renderTimeline();
+      }
+    },
+    
+    /**
+     * Save custom action
+     */
+    saveCustomAction: function() {
+      var name = document.getElementById('custom-action-name').value.trim();
+      var code = document.getElementById('custom-action-code').value.trim();
+      
+      if (!name) {
+        alert('Please enter an action name');
+        return;
+      }
+      
+      if (!code) {
+        alert('Please enter action code');
+        return;
+      }
+      
+      try {
+        // Validate that it's a function
+        var fn = eval('(' + code + ')');
+        if (typeof fn !== 'function') {
+          throw new Error('Code must be a function');
+        }
+        
+        this.customActions[name] = code;
+        document.getElementById('custom-action-name').value = '';
+        document.getElementById('custom-action-code').value = '';
+        this.renderCustomActions();
+        alert('Custom action "' + name + '" saved!');
+      } catch (e) {
+        alert('Invalid function code: ' + e.message);
+      }
+    },
+    
+    /**
+     * Delete custom action
+     */
+    deleteCustomAction: function(name) {
+      if (confirm('Delete custom action "' + name + '"?')) {
+        delete this.customActions[name];
+        this.renderCustomActions();
       }
     },
     
@@ -563,29 +799,48 @@ var PresentationEditor = (function() {
      * Export script to JavaScript
      */
     exportScript: function() {
-      var script = '// Tomte Script\n';
-      script += 'this.tomte\n';
-      this.tomteCommands.forEach(function(cmd) {
-        var params = cmd.params.map(function(p) {
-          return typeof p === 'string' ? '"' + p + '"' : p;
-        }).join(', ');
-        script += '  .' + cmd.type + '(' + params + ')\n';
+      var script = '// Custom Actions\n';
+      for (var name in this.customActions) {
+        script += 'var ' + name + ' = ' + this.customActions[name] + ';\n';
+      }
+      script += '\n// Presentation Script\n';
+      script += '// Two-column timeline with sync points\n\n';
+      
+      var tomteScript = 'this.tomte\n';
+      var goatScript = 'this.goat\n';
+      
+      this.timeline.forEach(function(row, index) {
+        if (row.type === 'sync') {
+          script += '\n// SYNC POINT: ' + row.label + '\n';
+          if (row.tomte) {
+            var params = row.tomte.params.map(function(p) {
+              return typeof p === 'string' ? '"' + p + '"' : p;
+            }).join(', ');
+            tomteScript += '  .' + row.tomte.type + '(' + params + ')\n';
+          }
+        } else {
+          if (row.tomte) {
+            var params = row.tomte.params.map(function(p) {
+              return typeof p === 'string' ? '"' + p + '"' : p;
+            }).join(', ');
+            tomteScript += '  .' + row.tomte.type + '(' + params + ')\n';
+          }
+          if (row.goat) {
+            var params = row.goat.params.map(function(p) {
+              return typeof p === 'string' ? '"' + p + '"' : p;
+            }).join(', ');
+            goatScript += '  .' + row.goat.type + '(' + params + ')\n';
+          }
+        }
       });
       
-      script += '\n// Goat Script\n';
-      script += 'this.goat\n';
-      this.goatCommands.forEach(function(cmd) {
-        var params = cmd.params.map(function(p) {
-          return typeof p === 'string' ? '"' + p + '"' : p;
-        }).join(', ');
-        script += '  .' + cmd.type + '(' + params + ')\n';
-      });
+      script += tomteScript + '\n\n' + goatScript;
       
       var blob = new Blob([script], { type: 'text/plain' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'presentation-script.js';
+      a.download = 'presentation-timeline.js';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -606,12 +861,13 @@ var PresentationEditor = (function() {
           reader.onload = function(event) {
             try {
               var data = JSON.parse(event.target.result);
-              this.tomteCommands = data.tomte || [];
-              this.goatCommands = data.goat || [];
-              this.renderCommandsList();
-              alert('Script imported successfully! Restart the presentation to see changes.');
+              this.timeline = data.timeline || [];
+              this.customActions = data.customActions || {};
+              this.renderTimeline();
+              this.renderCustomActions();
+              alert('Timeline imported successfully! Restart to see changes.');
             } catch (error) {
-              alert('Error importing script: ' + error.message);
+              alert('Error importing timeline: ' + error.message);
             }
           }.bind(this);
           reader.readAsText(file);
