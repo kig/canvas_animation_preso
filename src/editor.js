@@ -131,6 +131,7 @@ var PresentationEditor = (function() {
               <button id="stop-presentation" class="btn">Stop</button>
               <button id="restart-presentation" class="btn">Restart</button>
               <button id="export-script" class="btn">Export Script</button>
+              <button id="export-json" class="btn">Export JSON</button>
               <button id="import-script" class="btn">Import Script</button>
             </div>
           </div>
@@ -575,6 +576,13 @@ var PresentationEditor = (function() {
         });
       }
       
+      var exportJsonBtn = document.getElementById('export-json');
+      if (exportJsonBtn) {
+        exportJsonBtn.addEventListener('click', function() {
+          self.exportJSON();
+        });
+      }
+      
       var importBtn = document.getElementById('import-script');
       if (importBtn) {
         importBtn.addEventListener('click', function() {
@@ -793,6 +801,85 @@ var PresentationEditor = (function() {
         delete this.customActions[name];
         this.renderCustomActions();
       }
+    },
+    
+    /**
+     * Export to JSON presentation format
+     */
+    exportJSON: function() {
+      var presentation = {
+        title: "Canvas Animation Presentation",
+        settings: {
+          frameDuration: 30,
+          fixedTimestep: true,
+          clear: true,
+          playOnlyWhenFocused: false,
+          width: 1024,
+          height: 768
+        },
+        background: {
+          type: "image",
+          src: "trees2.jpg",
+          zIndex: -1,
+          visible: false
+        },
+        characters: [
+          {
+            name: "tomte",
+            type: "Tomte",
+            position: { x: 0, y: 0 }
+          },
+          {
+            name: "goat",
+            type: "Goat",
+            position: { x: 0, y: 0 }
+          }
+        ],
+        timeline: {},
+        customActions: this.customActions
+      };
+      
+      // Convert timeline to JSON format
+      var tomteActions = [];
+      var goatActions = [];
+      
+      this.timeline.forEach(function(row) {
+        if (row.type === 'sync') {
+          if (row.tomte) {
+            tomteActions.push({
+              method: row.tomte.type,
+              params: row.tomte.params
+            });
+          }
+        } else {
+          if (row.tomte) {
+            tomteActions.push({
+              method: row.tomte.type,
+              params: row.tomte.params
+            });
+          }
+          if (row.goat) {
+            goatActions.push({
+              method: row.goat.type,
+              params: row.goat.params
+            });
+          }
+        }
+      });
+      
+      presentation.timeline.tomte = tomteActions;
+      presentation.timeline.goat = goatActions;
+      
+      var json = JSON.stringify(presentation, null, 2);
+      var blob = new Blob([json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'presentation.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     },
     
     /**
