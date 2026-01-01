@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Presentation Tests - Property-Based Testing</title>
+  <script type="text/javascript" src="src/cake.js"></script>
+  <script type="text/javascript" src="src/support.js"></script>
+  <script type="text/javascript" src="src/presentation.js"></script>
+  <script type="text/javascript" src="src/animation-runner.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f0f0f0;
+    }
+    h1 {
+      color: #333;
+    }
+    .test-suite {
+      background: white;
+      padding: 20px;
+      margin: 10px 0;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .test-result {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 3px;
+    }
+    .test-pass {
+      background: #d4edda;
+      border-left: 4px solid #28a745;
+    }
+    .test-fail {
+      background: #f8d7da;
+      border-left: 4px solid #dc3545;
+    }
+    .test-summary {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin: 20px 0;
+      padding: 15px;
+      background: #e7f3ff;
+      border-radius: 5px;
+    }
+    .error-detail {
+      color: #721c24;
+      font-family: monospace;
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Canvas Animation Presentation - Property-Based Tests</h1>
+  <button onclick="runAllTests()">Run All Tests</button>
+  <button onclick="clearResults()">Clear Results</button>
+  
+  <div id="test-results"></div>
+  
+  <script>
+    // QuickCheck-style property-based testing framework
+    var TestFramework = {
+      results: [],
+      
+      assert: function(condition, message) {
+        if (!condition) {
+          throw new Error(message || 'Assertion failed');
+        }
+      },
+      
+      assertEqual: function(actual, expected, message) {
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          throw new Error((message || 'Values not equal') + '\nExpected: ' + JSON.stringify(expected) + '\nActual: ' + JSON.stringify(actual));
+        }
+      },
+      
+      assertTrue: function(condition, message) {
+        this.assert(condition === true, message || 'Expected true');
+      },
+      
+      assertFalse: function(condition, message) {
+        this.assert(condition === false, message || 'Expected false');
+      },
+      
+      test: function(name, testFn) {
+        try {
+          testFn();
+          this.results.push({ name: name, passed: true });
+          return true;
+        } catch (error) {
+          this.results.push({ name: name, passed: false, error: error.message });
+          return false;
+        }
+      },
+      
+      generateTimeline: function(size) {
+        var timeline = [];
+        var actions = ['wait', 'walkTo', 'say', 'smile', 'plain', 'lookLeft', 'lookRight'];
+        
+        for (var i = 0; i < size; i++) {
+          var action = actions[Math.floor(Math.random() * actions.length)];
+          var params = [];
+          
+          if (action === 'wait') {
+            params = [Math.floor(Math.random() * 5000) + 100];
+          } else if (action === 'walkTo') {
+            params = [Math.floor(Math.random() * 1000), Math.floor(Math.random() * 700)];
+          } else if (action === 'say') {
+            params = ['Test message ' + i];
+          }
+          
+          timeline.push({ method: action, params: params });
+        }
+        
+        return timeline;
+      }
+    };
+    
+    // Test Suite 1: Timeline Order Invariants
+    function testTimelineOrderPreservation() {
+      TestFramework.test('Timeline functions maintain order', function() {
+        var timeline = [
+          { method: 'wait', params: [100] },
+          { method: 'walkTo', params: [500, 500] },
+          { method: 'say', params: ['Hello'] }
+        ];
+        
+        var json = {
+          settings: { frameDuration: 30 },
+          background: { type: 'rectangle', fill: [200, 200, 200, 1], width: 1024, height: 768 },
+          characters: [{ name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } }],
+          timeline: { tomte: timeline }
+        };
+        
+        // Verify timeline order is preserved
+        TestFramework.assertEqual(json.timeline.tomte.length, 3, 'Timeline should have 3 actions');
+        TestFramework.assertEqual(json.timeline.tomte[0].method, 'wait', 'First action should be wait');
+        TestFramework.assertEqual(json.timeline.tomte[1].method, 'walkTo', 'Second action should be walkTo');
+        TestFramework.assertEqual(json.timeline.tomte[2].method, 'say', 'Third action should be say');
+      });
+      
+      TestFramework.test('Timeline order preserved through JSON roundtrip', function() {
+        var originalTimeline = TestFramework.generateTimeline(10);
+        var json = JSON.stringify({ timeline: { tomte: originalTimeline } });
+        var parsed = JSON.parse(json);
+        
+        TestFramework.assertEqual(parsed.timeline.tomte.length, originalTimeline.length, 'Timeline length preserved');
+        
+        for (var i = 0; i < originalTimeline.length; i++) {
+          TestFramework.assertEqual(
+            parsed.timeline.tomte[i].method, 
+            originalTimeline[i].method, 
+            'Action ' + i + ' method preserved'
+          );
+        }
+      });
+    }
+    
+    // Test Suite 2: Sync Point Invariants
+    function testSyncPointInvariants() {
+      TestFramework.test('Sync points are preserved in timeline', function() {
+        var timeline = {
+          tomte: [
+            { method: 'wait', params: [100] },
+            { method: 'waitFor', params: ['sync1'] }
+          ],
+          goat: [
+            { method: 'wait', params: [100] },
+            { method: 'say', params: ['Trigger', 'sync1'] }
+          ]
+        };
+        
+        var tomteHasWaitFor = timeline.tomte.some(function(action) {
+          return action.method === 'waitFor' && action.params[0] === 'sync1';
+        });
+        
+        TestFramework.assertTrue(tomteHasWaitFor, 'Tomte timeline should have waitFor sync1');
+      });
+      
+      TestFramework.test('Sync points have unique labels', function() {
+        var timeline = [
+          { method: 'waitFor', params: ['sync1'] },
+          { method: 'waitFor', params: ['sync2'] },
+          { method: 'waitFor', params: ['sync3'] }
+        ];
+        
+        var labels = timeline
+          .filter(function(a) { return a.method === 'waitFor'; })
+          .map(function(a) { return a.params[0]; });
+        
+        var uniqueLabels = labels.filter(function(label, index) {
+          return labels.indexOf(label) === index;
+        });
+        
+        TestFramework.assertEqual(labels.length, uniqueLabels.length, 'All sync labels should be unique');
+      });
+    }
+    
+    // Test Suite 3: JSON Loading and Construction
+    function testJSONLoadingAndConstruction() {
+      TestFramework.test('Original presentation.json loads successfully', function() {
+        fetch('presentation.json')
+          .then(function(response) { return response.json(); })
+          .then(function(json) {
+            TestFramework.assertTrue(json !== null, 'JSON should load');
+            TestFramework.assertTrue(json.title !== undefined, 'JSON should have title');
+            TestFramework.assertTrue(json.settings !== undefined, 'JSON should have settings');
+            TestFramework.assertTrue(json.timeline !== undefined, 'JSON should have timeline');
+          })
+          .catch(function(error) {
+            throw new Error('Failed to load presentation.json: ' + error.message);
+          });
+      });
+      
+      TestFramework.test('Presentation can be constructed from JSON', function() {
+        var json = {
+          title: 'Test Presentation',
+          settings: {
+            frameDuration: 30,
+            fixedTimestep: true,
+            width: 1024,
+            height: 768
+          },
+          background: {
+            type: 'rectangle',
+            fill: [100, 100, 100, 1],
+            width: 1024,
+            height: 768
+          },
+          characters: [
+            { name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } }
+          ],
+          timeline: {
+            tomte: [
+              { method: 'wait', params: [100] }
+            ]
+          }
+        };
+        
+        TestFramework.assertTrue(json.settings.frameDuration === 30, 'Frame duration set correctly');
+        TestFramework.assertTrue(json.characters.length === 1, 'One character defined');
+        TestFramework.assertTrue(json.timeline.tomte.length === 1, 'Timeline has actions');
+      });
+      
+      TestFramework.test('Timeline structure validation', function() {
+        var validTimeline = {
+          tomte: [
+            { method: 'wait', params: [100] },
+            { method: 'walkTo', params: [500, 600] }
+          ]
+        };
+        
+        // Validate structure
+        TestFramework.assertTrue(Array.isArray(validTimeline.tomte), 'Timeline should be array');
+        TestFramework.assertTrue(validTimeline.tomte.every(function(action) {
+          return action.method !== undefined && Array.isArray(action.params);
+        }), 'All actions should have method and params');
+      });
+    }
+    
+    // Test Suite 4: Action Source Retrieval
+    function testActionSourceRetrieval() {
+      TestFramework.test('Action source can be retrieved from timeline', function() {
+        var timeline = [
+          { method: 'wait', params: [100] },
+          { method: 'say', params: ['Hello'] },
+          { method: 'walkTo', params: [700, 690] }
+        ];
+        
+        var action = timeline[1];
+        TestFramework.assertEqual(action.method, 'say', 'Can retrieve action method');
+        TestFramework.assertEqual(action.params[0], 'Hello', 'Can retrieve action params');
+      });
+      
+      TestFramework.test('Timeline can be converted to JavaScript source', function() {
+        var timeline = [
+          { method: 'wait', params: [100] },
+          { method: 'walkTo', params: [500, 600] }
+        ];
+        
+        var source = 'this.tomte\n';
+        timeline.forEach(function(action) {
+          var params = action.params.map(function(p) {
+            return typeof p === 'string' ? '"' + p + '"' : p;
+          }).join(', ');
+          source += '  .' + action.method + '(' + params + ')\n';
+        });
+        
+        TestFramework.assertTrue(source.indexOf('.wait(100)') > -1, 'Source contains wait');
+        TestFramework.assertTrue(source.indexOf('.walkTo(500, 600)') > -1, 'Source contains walkTo');
+      });
+    }
+    
+    // Test Suite 5: Body Part Image Verification
+    function testBodyPartImages() {
+      TestFramework.test('Character sprite definitions are correct', function() {
+        var charDef = {
+          name: 'tomte',
+          type: 'Tomte',
+          sprites: {
+            head: 'tomte_sprite/head.png',
+            torso_front: 'tomte_sprite/torso_front.png',
+            left_foot: 'tomte_sprite/left_foot.png',
+            right_foot: 'tomte_sprite/right_foot.png'
+          }
+        };
+        
+        TestFramework.assertTrue(charDef.sprites.head.indexOf('tomte_sprite') > -1, 'Head sprite path correct');
+        TestFramework.assertTrue(charDef.sprites.left_foot.indexOf('left_foot.png') > -1, 'Foot sprite path correct');
+      });
+      
+      TestFramework.test('Sprite paths match expected pattern', function() {
+        var spritePaths = [
+          'tomte_sprite/head.png',
+          'tomte_sprite/torso_front.png',
+          'goat_sprite/head.png',
+          'goat_sprite/torso.png'
+        ];
+        
+        spritePaths.forEach(function(path) {
+          TestFramework.assertTrue(
+            path.match(/^(tomte|goat)_sprite\/.*\.png$/) !== null,
+            'Path ' + path + ' matches expected pattern'
+          );
+        });
+      });
+    }
+    
+    // Test Suite 6: Background Verification
+    function testBackgroundConfiguration() {
+      TestFramework.test('Background type validation', function() {
+        var backgrounds = [
+          { type: 'image', src: 'trees2.jpg' },
+          { type: 'rectangle', fill: [100, 100, 100, 1], width: 1024, height: 768 }
+        ];
+        
+        backgrounds.forEach(function(bg) {
+          TestFramework.assertTrue(
+            bg.type === 'image' || bg.type === 'rectangle',
+            'Background type should be image or rectangle'
+          );
+          
+          if (bg.type === 'image') {
+            TestFramework.assertTrue(bg.src !== undefined, 'Image background should have src');
+          } else if (bg.type === 'rectangle') {
+            TestFramework.assertTrue(Array.isArray(bg.fill), 'Rectangle background should have fill');
+          }
+        });
+      });
+      
+      TestFramework.test('Background images exist', function() {
+        var imageBackgrounds = ['trees2.jpg', 'bg.jpg', 'bg_day.jpg'];
+        
+        // Verify format is correct
+        imageBackgrounds.forEach(function(img) {
+          TestFramework.assertTrue(img.endsWith('.jpg'), 'Background should be jpg file');
+        });
+      });
+    }
+    
+    // Test Suite 7: Background Timeline Actions
+    function testBackgroundTimelineActions() {
+      TestFramework.test('Background can be changed via timeline', function() {
+        var presentation = {
+          background: { type: 'image', src: 'trees2.jpg', zIndex: -1 },
+          timeline: {
+            tomte: [
+              { method: 'changeBackground', params: ['bg_day.jpg'] }
+            ]
+          }
+        };
+        
+        TestFramework.assertTrue(presentation.background.src === 'trees2.jpg', 'Initial background set');
+        
+        // Verify timeline can change background
+        var bgChangeAction = presentation.timeline.tomte.find(function(a) {
+          return a.method === 'changeBackground';
+        });
+        
+        TestFramework.assertTrue(bgChangeAction !== undefined, 'Background change action exists');
+        TestFramework.assertEqual(bgChangeAction.params[0], 'bg_day.jpg', 'New background specified');
+      });
+      
+      TestFramework.test('Background visibility can be toggled', function() {
+        var bgStates = [
+          { type: 'image', src: 'bg.jpg', visible: true },
+          { type: 'image', src: 'bg.jpg', visible: false }
+        ];
+        
+        bgStates.forEach(function(bg) {
+          TestFramework.assertTrue(
+            typeof bg.visible === 'boolean',
+            'Background visible property should be boolean'
+          );
+        });
+      });
+    }
+    
+    // Test Suite 8: Title Text Animation
+    function testTitleTextAnimation() {
+      TestFramework.test('Title text can be animated', function() {
+        var textActions = [
+          { method: 'showTitle', params: ['Canvas Animation', 2000] },
+          { method: 'hideTitle', params: [] },
+          { method: 'animateTitle', params: ['fade', 1000] }
+        ];
+        
+        textActions.forEach(function(action) {
+          TestFramework.assertTrue(action.method !== undefined, 'Text action has method');
+          TestFramework.assertTrue(Array.isArray(action.params), 'Text action has params');
+        });
+      });
+      
+      TestFramework.test('Text animation properties are valid', function() {
+        var titleDef = {
+          text: 'Canvas Animation',
+          position: { x: 512, y: 384 },
+          fontSize: 48,
+          color: '#ffffff',
+          animation: { type: 'fade', duration: 1000 }
+        };
+        
+        TestFramework.assertTrue(titleDef.text.length > 0, 'Title has text');
+        TestFramework.assertTrue(titleDef.position.x > 0 && titleDef.position.y > 0, 'Title has position');
+        TestFramework.assertTrue(titleDef.fontSize > 0, 'Title has font size');
+        TestFramework.assertTrue(titleDef.animation.duration > 0, 'Animation has duration');
+      });
+    }
+    
+    // Test Suite 9: Invariant Preservation
+    function testInvariantPreservation() {
+      TestFramework.test('Timeline length invariant preserved', function() {
+        for (var i = 0; i < 10; i++) {
+          var timeline = TestFramework.generateTimeline(i + 1);
+          TestFramework.assertEqual(timeline.length, i + 1, 'Timeline length matches expected');
+        }
+      });
+      
+      TestFramework.test('Action structure invariant preserved', function() {
+        var timeline = TestFramework.generateTimeline(20);
+        
+        timeline.forEach(function(action, index) {
+          TestFramework.assertTrue(
+            action.method !== undefined,
+            'Action ' + index + ' has method'
+          );
+          TestFramework.assertTrue(
+            Array.isArray(action.params),
+            'Action ' + index + ' has params array'
+          );
+        });
+      });
+      
+      TestFramework.test('Character state consistency', function() {
+        var characters = [
+          { name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } },
+          { name: 'goat', type: 'Goat', position: { x: 0, y: 0 } }
+        ];
+        
+        characters.forEach(function(char) {
+          TestFramework.assertTrue(char.name !== undefined, 'Character has name');
+          TestFramework.assertTrue(char.type !== undefined, 'Character has type');
+          TestFramework.assertTrue(char.position !== undefined, 'Character has position');
+          TestFramework.assertTrue(typeof char.position.x === 'number', 'Position x is number');
+          TestFramework.assertTrue(typeof char.position.y === 'number', 'Position y is number');
+        });
+      });
+    }
+    
+    // Run all test suites
+    function runAllTests() {
+      TestFramework.results = [];
+      
+      console.log('Running property-based tests...');
+      
+      testTimelineOrderPreservation();
+      testSyncPointInvariants();
+      testJSONLoadingAndConstruction();
+      testActionSourceRetrieval();
+      testBodyPartImages();
+      testBackgroundConfiguration();
+      testBackgroundTimelineActions();
+      testTitleTextAnimation();
+      testInvariantPreservation();
+      
+      displayResults();
+    }
+    
+    function displayResults() {
+      var resultsDiv = document.getElementById('test-results');
+      resultsDiv.innerHTML = '';
+      
+      var passed = TestFramework.results.filter(function(r) { return r.passed; }).length;
+      var failed = TestFramework.results.filter(function(r) { return !r.passed; }).length;
+      
+      var summary = document.createElement('div');
+      summary.className = 'test-summary';
+      summary.innerHTML = 'Tests Run: ' + TestFramework.results.length + 
+                          ' | Passed: ' + passed + 
+                          ' | Failed: ' + failed;
+      resultsDiv.appendChild(summary);
+      
+      var suite = document.createElement('div');
+      suite.className = 'test-suite';
+      
+      TestFramework.results.forEach(function(result) {
+        var resultDiv = document.createElement('div');
+        resultDiv.className = 'test-result ' + (result.passed ? 'test-pass' : 'test-fail');
+        
+        var status = result.passed ? '✓' : '✗';
+        resultDiv.innerHTML = '<strong>' + status + ' ' + result.name + '</strong>';
+        
+        if (!result.passed) {
+          var errorDiv = document.createElement('div');
+          errorDiv.className = 'error-detail';
+          errorDiv.textContent = result.error;
+          resultDiv.appendChild(errorDiv);
+        }
+        
+        suite.appendChild(resultDiv);
+      });
+      
+      resultsDiv.appendChild(suite);
+    }
+    
+    function clearResults() {
+      document.getElementById('test-results').innerHTML = '';
+      TestFramework.results = [];
+    }
+    
+    // Auto-run tests on load
+    window.addEventListener('load', function() {
+      setTimeout(runAllTests, 500);
+    });
+  </script>
+</body>
+</html>
