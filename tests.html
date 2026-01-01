@@ -89,7 +89,11 @@
 </head>
 <body>
   <h1>Canvas Animation Presentation - Property-Based Tests</h1>
-  <button onclick="runAllTests()">Run All Tests</button>
+  <div style="background: #fff3cd; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #ffc107;">
+    <strong>Note:</strong> This test suite runs 16,000 randomized test cases. 
+    Click "Run All Tests" to start (takes ~5 seconds).
+  </div>
+  <button onclick="runAllTests()">Run All Tests (16,000 cases)</button>
   <button onclick="clearResults()">Clear Results</button>
   <div class="progress" id="progress"></div>
   
@@ -819,10 +823,10 @@
       TestFramework.results = [];
     }
     
-    // Auto-run tests on load
-    window.addEventListener('load', function() {
-      setTimeout(runAllTests, 500);
-    });
+    // Optional: Auto-run tests on load (commented out for performance)
+    // window.addEventListener('load', function() {
+    //   setTimeout(runAllTests, 500);
+    // });
   </script>
 </body>
 </html>

@@ -1,7 +1,16 @@
 /*
   Animation Runner Library
   
-  Executes animation timelines defined in JSON format
+  Framework-agnostic library for executing animation timelines defined in JSON format.
+  Loads presentations, creates characters, and executes action sequences.
+  
+  @example
+  var data = {
+    settings: { frameDuration: 30 },
+    characters: [{ name: 'tomte', type: 'Tomte', position: {x: 0, y: 0} }],
+    timeline: { tomte: [{ method: 'walkTo', params: [100, 100] }] }
+  };
+  AnimationRunner.loadPresentation(data, document.getElementById('canvas'));
 */
 
 var AnimationRunner = (function() {
@@ -10,6 +19,9 @@ var AnimationRunner = (function() {
   var runner = {
     /**
      * Load and play presentation from JSON
+     * @param {Object|string} json - Presentation JSON object or string
+     * @param {HTMLCanvasElement} canvasElement - Canvas element to render to
+     * @returns {Object} Presentation instance with canvas, root, characters, and presentation data
      */
     loadPresentation: function(json, canvasElement) {
       var presentation = typeof json === 'string' ? JSON.parse(json) : json;
@@ -55,7 +67,9 @@ var AnimationRunner = (function() {
     },
     
     /**
-     * Create background from definition
+     * Create background node from definition
+     * @param {Object} bgDef - Background definition {type, src|fill, zIndex, visible}
+     * @returns {CanvasNode|null} Background node or null if invalid
      */
     createBackground: function(bgDef) {
       if (bgDef.type === 'image') {
@@ -75,7 +89,9 @@ var AnimationRunner = (function() {
     },
     
     /**
-     * Create character from definition
+     * Create character instance from definition
+     * @param {Object} charDef - Character definition {name, type, position}
+     * @returns {CanvasNode} Character node instance
      */
     createCharacter: function(charDef) {
       // This assumes character classes like Tomte and Goat exist
@@ -91,7 +107,9 @@ var AnimationRunner = (function() {
     },
     
     /**
-     * Play timeline
+     * Execute timeline actions for all characters
+     * @param {Object} timeline - Timeline object with character names as keys
+     * @param {Object} characters - Character instances keyed by name
      */
     playTimeline: function(timeline, characters) {
       // Execute actions for each character
@@ -104,7 +122,10 @@ var AnimationRunner = (function() {
     },
     
     /**
-     * Execute action sequence on character
+     * Execute action sequence on a character using fluent API chaining
+     * @param {Object} character - Character instance with action methods
+     * @param {Array} actions - Array of action objects {method, params}
+     * @returns {Object} Final chain result
      */
     executeActions: function(character, actions) {
       var chain = character;
@@ -124,7 +145,10 @@ var AnimationRunner = (function() {
     },
     
     /**
-     * Convert timeline to JSON format
+     * Convert editor timeline format to JSON presentation format
+     * @param {Array} timeline - Editor timeline (two-column row format)
+     * @param {Object} customActions - Custom action definitions {name: code}
+     * @returns {Object} JSON presentation timeline and custom actions
      */
     timelineToJSON: function(timeline, customActions) {
       var result = {
