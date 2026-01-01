@@ -22,9 +22,23 @@ var AnimationRunner = (function() {
      * @param {Object|string} json - Presentation JSON object or string
      * @param {HTMLCanvasElement} canvasElement - Canvas element to render to
      * @returns {Object} Presentation instance with canvas, root, characters, and presentation data
+     * @throws {Error} If JSON is invalid or required fields are missing
      */
     loadPresentation: function(json, canvasElement) {
+      // Validate inputs
+      if (!json) {
+        throw new Error('Presentation JSON is required');
+      }
+      if (!canvasElement) {
+        throw new Error('Canvas element is required');
+      }
+      
       var presentation = typeof json === 'string' ? JSON.parse(json) : json;
+      
+      // Validate presentation structure
+      if (!presentation.settings) {
+        throw new Error('Presentation must have settings object');
+      }
       
       // Create canvas animation
       var canvas = new Canvas(canvasElement);
@@ -38,8 +52,14 @@ var AnimationRunner = (function() {
       
       // Add background
       if (presentation.background) {
-        var bg = this.createBackground(presentation.background);
-        root.append(bg);
+        try {
+          var bg = this.createBackground(presentation.background);
+          if (bg) {
+            root.append(bg);
+          }
+        } catch (e) {
+          console.warn('Failed to create background:', e.message);
+        }
       }
       
       // Create characters
@@ -47,15 +67,23 @@ var AnimationRunner = (function() {
       if (presentation.characters) {
         for (var i = 0; i < presentation.characters.length; i++) {
           var charDef = presentation.characters[i];
-          var char = this.createCharacter(charDef);
-          characters[charDef.name] = char;
-          root.append(char);
+          try {
+            var char = this.createCharacter(charDef);
+            characters[charDef.name] = char;
+            root.append(char);
+          } catch (e) {
+            console.warn('Failed to create character ' + charDef.name + ':', e.message);
+          }
         }
       }
       
       // Play timeline
       if (presentation.timeline) {
-        this.playTimeline(presentation.timeline, characters);
+        try {
+          this.playTimeline(presentation.timeline, characters);
+        } catch (e) {
+          console.warn('Failed to play timeline:', e.message);
+        }
       }
       
       return {

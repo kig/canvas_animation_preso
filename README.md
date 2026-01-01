@@ -9,8 +9,11 @@ This project provides tools for creating, editing, and playing canvas animation 
 ## Quick Start
 
 ```bash
-# View the original presentation
+# View the original presentation (hardcoded animations)
 open index.html
+
+# View JSON-driven presentation (optimal architecture)
+open index-json.html
 
 # Use the timeline editor
 open editor.html
@@ -32,7 +35,8 @@ canvas_animation_preso/
 │   ├── presentation.js       # Character classes and presentation logic
 │   ├── animation-runner.js   # JSON presentation execution library
 │   └── editor.js             # Timeline editor implementation
-├── index.html                # Original presentation demo
+├── index.html                # Original presentation (hardcoded)
+├── index-json.html           # JSON-driven presentation (optimal) ✨
 ├── editor.html               # Visual timeline editor
 ├── player.html               # JSON presentation player
 ├── tests.html                # Property-based test suite
@@ -116,19 +120,33 @@ Comprehensive test suite with 16,000 test runs:
 
 ### Loading JSON Presentations
 
-```html
-<!-- Method 1: URL parameter -->
-<script>
-  // player.html?presentation=my-presentation.json
-</script>
+**Optimal architecture** (`index-json.html`):
 
-<!-- Method 2: JavaScript -->
+```html
+<script src="src/cake.js"></script>
+<script src="src/support.js"></script>
+<script src="src/presentation.js"></script>
 <script src="src/animation-runner.js"></script>
 <script>
   fetch('presentation.json')
     .then(r => r.json())
     .then(data => AnimationRunner.loadPresentation(data, canvas));
 </script>
+```
+
+**Player with URL parameter:**
+
+```bash
+# player.html?presentation=my-presentation.json
+```
+
+**Direct JavaScript:**
+
+```javascript
+// Load and play
+fetch('presentation.json')
+  .then(r => r.json())
+  .then(data => AnimationRunner.loadPresentation(data, canvas));
 ```
 
 ### Custom Actions
