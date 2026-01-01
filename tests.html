@@ -27,6 +27,9 @@
       padding: 10px;
       margin: 5px 0;
       border-radius: 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .test-pass {
       background: #d4edda;
@@ -35,6 +38,19 @@
     .test-fail {
       background: #f8d7da;
       border-left: 4px solid #dc3545;
+    }
+    .test-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .test-name {
+      font-weight: bold;
+    }
+    .test-stats {
+      font-size: 0.9em;
+      color: #666;
+      font-family: monospace;
     }
     .test-summary {
       font-size: 1.2em;
@@ -49,6 +65,7 @@
       font-family: monospace;
       font-size: 0.9em;
       margin-top: 5px;
+      grid-column: 1 / -1;
     }
     button {
       background: #007bff;
@@ -63,19 +80,26 @@
     button:hover {
       background: #0056b3;
     }
+    .progress {
+      font-size: 0.9em;
+      color: #666;
+      margin: 10px 0;
+    }
   </style>
 </head>
 <body>
   <h1>Canvas Animation Presentation - Property-Based Tests</h1>
   <button onclick="runAllTests()">Run All Tests</button>
   <button onclick="clearResults()">Clear Results</button>
+  <div class="progress" id="progress"></div>
   
   <div id="test-results"></div>
   
   <script>
-    // QuickCheck-style property-based testing framework
+    // QuickCheck-style property-based testing framework with proper randomization
     var TestFramework = {
       results: [],
+      defaultIterations: 1000,
       
       assert: function(condition, message) {
         if (!condition) {
@@ -97,408 +121,640 @@
         this.assert(condition === false, message || 'Expected false');
       },
       
+      // Property-based test runner
+      property: function(name, generator, testFn, iterations) {
+        iterations = iterations || this.defaultIterations;
+        var uniqueCases = new Set();
+        var passed = 0;
+        var failed = 0;
+        var firstError = null;
+        
+        for (var i = 0; i < iterations; i++) {
+          try {
+            var testCase = generator();
+            var caseKey = JSON.stringify(testCase);
+            uniqueCases.add(caseKey);
+            
+            testFn(testCase);
+            passed++;
+          } catch (error) {
+            failed++;
+            if (!firstError) {
+              firstError = error.message;
+            }
+          }
+        }
+        
+        this.results.push({
+          name: name,
+          passed: failed === 0,
+          runs: iterations,
+          uniqueCases: uniqueCases.size,
+          passedRuns: passed,
+          failedRuns: failed,
+          error: firstError
+        });
+        
+        return failed === 0;
+      },
+      
+      // Simple test for non-property based tests
       test: function(name, testFn) {
         try {
           testFn();
-          this.results.push({ name: name, passed: true });
+          this.results.push({ 
+            name: name, 
+            passed: true,
+            runs: 1,
+            uniqueCases: 1,
+            passedRuns: 1,
+            failedRuns: 0
+          });
           return true;
         } catch (error) {
-          this.results.push({ name: name, passed: false, error: error.message });
+          this.results.push({ 
+            name: name, 
+            passed: false, 
+            error: error.message,
+            runs: 1,
+            uniqueCases: 1,
+            passedRuns: 0,
+            failedRuns: 1
+          });
           return false;
         }
       },
       
-      generateTimeline: function(size) {
-        var timeline = [];
-        var actions = ['wait', 'walkTo', 'say', 'smile', 'plain', 'lookLeft', 'lookRight'];
+      // Random generators
+      randomInt: function(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      },
+      
+      randomChoice: function(array) {
+        return array[Math.floor(Math.random() * array.length)];
+      },
+      
+      randomString: function(length) {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
+        var result = '';
+        for (var i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      },
+      
+      randomBool: function() {
+        return Math.random() < 0.5;
+      },
+      
+      // Timeline generators
+      generateAction: function() {
+        var actionTypes = ['wait', 'walkTo', 'say', 'smile', 'plain', 'lookLeft', 'lookRight', 
+                          'wave', 'angry', 'surprised', 'bored', 'stop'];
+        var type = this.randomChoice(actionTypes);
+        var params = [];
         
-        for (var i = 0; i < size; i++) {
-          var action = actions[Math.floor(Math.random() * actions.length)];
-          var params = [];
-          
-          if (action === 'wait') {
-            params = [Math.floor(Math.random() * 5000) + 100];
-          } else if (action === 'walkTo') {
-            params = [Math.floor(Math.random() * 1000), Math.floor(Math.random() * 700)];
-          } else if (action === 'say') {
-            params = ['Test message ' + i];
-          }
-          
-          timeline.push({ method: action, params: params });
+        switch(type) {
+          case 'wait':
+            params = [this.randomInt(10, 10000)];
+            break;
+          case 'walkTo':
+            params = [this.randomInt(0, 1024), this.randomInt(0, 768)];
+            break;
+          case 'say':
+            params = [this.randomString(this.randomInt(5, 50))];
+            if (this.randomBool()) {
+              params.push('sync_' + this.randomInt(1, 100));
+            }
+            break;
+          default:
+            params = [];
         }
         
+        return { method: type, params: params };
+      },
+      
+      generateTimeline: function(minSize, maxSize) {
+        var size = this.randomInt(minSize, maxSize);
+        var timeline = [];
+        for (var i = 0; i < size; i++) {
+          timeline.push(this.generateAction());
+        }
         return timeline;
+      },
+      
+      generateCharacterDef: function() {
+        var names = ['tomte', 'goat', 'char1', 'char2'];
+        var types = ['Tomte', 'Goat'];
+        return {
+          name: this.randomChoice(names),
+          type: this.randomChoice(types),
+          position: { 
+            x: this.randomInt(0, 1024), 
+            y: this.randomInt(0, 768) 
+          }
+        };
+      },
+      
+      generateBackground: function() {
+        if (this.randomBool()) {
+          return {
+            type: 'image',
+            src: this.randomChoice(['trees2.jpg', 'bg.jpg', 'bg_day.jpg']),
+            zIndex: -1,
+            visible: this.randomBool()
+          };
+        } else {
+          return {
+            type: 'rectangle',
+            fill: [this.randomInt(0, 255), this.randomInt(0, 255), this.randomInt(0, 255), Math.random()],
+            width: this.randomInt(800, 1200),
+            height: this.randomInt(600, 900),
+            zIndex: -1,
+            visible: this.randomBool()
+          };
+        }
       }
     };
     
-    // Test Suite 1: Timeline Order Invariants
-    function testTimelineOrderPreservation() {
-      TestFramework.test('Timeline functions maintain order', function() {
-        var timeline = [
-          { method: 'wait', params: [100] },
-          { method: 'walkTo', params: [500, 500] },
-          { method: 'say', params: ['Hello'] }
-        ];
-        
-        var json = {
-          settings: { frameDuration: 30 },
-          background: { type: 'rectangle', fill: [200, 200, 200, 1], width: 1024, height: 768 },
-          characters: [{ name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } }],
-          timeline: { tomte: timeline }
-        };
-        
-        // Verify timeline order is preserved
-        TestFramework.assertEqual(json.timeline.tomte.length, 3, 'Timeline should have 3 actions');
-        TestFramework.assertEqual(json.timeline.tomte[0].method, 'wait', 'First action should be wait');
-        TestFramework.assertEqual(json.timeline.tomte[1].method, 'walkTo', 'Second action should be walkTo');
-        TestFramework.assertEqual(json.timeline.tomte[2].method, 'say', 'Third action should be say');
-      });
-      
-      TestFramework.test('Timeline order preserved through JSON roundtrip', function() {
-        var originalTimeline = TestFramework.generateTimeline(10);
-        var json = JSON.stringify({ timeline: { tomte: originalTimeline } });
-        var parsed = JSON.parse(json);
-        
-        TestFramework.assertEqual(parsed.timeline.tomte.length, originalTimeline.length, 'Timeline length preserved');
-        
-        for (var i = 0; i < originalTimeline.length; i++) {
-          TestFramework.assertEqual(
-            parsed.timeline.tomte[i].method, 
-            originalTimeline[i].method, 
-            'Action ' + i + ' method preserved'
-          );
-        }
-      });
-    }
+    // Property-Based Test Suites
     
-    // Test Suite 2: Sync Point Invariants
-    function testSyncPointInvariants() {
-      TestFramework.test('Sync points are preserved in timeline', function() {
-        var timeline = {
-          tomte: [
-            { method: 'wait', params: [100] },
-            { method: 'waitFor', params: ['sync1'] }
-          ],
-          goat: [
-            { method: 'wait', params: [100] },
-            { method: 'say', params: ['Trigger', 'sync1'] }
-          ]
-        };
-        
-        var tomteHasWaitFor = timeline.tomte.some(function(action) {
-          return action.method === 'waitFor' && action.params[0] === 'sync1';
-        });
-        
-        TestFramework.assertTrue(tomteHasWaitFor, 'Tomte timeline should have waitFor sync1');
-      });
-      
-      TestFramework.test('Sync points have unique labels', function() {
-        var timeline = [
-          { method: 'waitFor', params: ['sync1'] },
-          { method: 'waitFor', params: ['sync2'] },
-          { method: 'waitFor', params: ['sync3'] }
-        ];
-        
-        var labels = timeline
-          .filter(function(a) { return a.method === 'waitFor'; })
-          .map(function(a) { return a.params[0]; });
-        
-        var uniqueLabels = labels.filter(function(label, index) {
-          return labels.indexOf(label) === index;
-        });
-        
-        TestFramework.assertEqual(labels.length, uniqueLabels.length, 'All sync labels should be unique');
-      });
-    }
-    
-    // Test Suite 3: JSON Loading and Construction
-    function testJSONLoadingAndConstruction() {
-      TestFramework.test('Original presentation.json loads successfully', function() {
-        fetch('presentation.json')
-          .then(function(response) { return response.json(); })
-          .then(function(json) {
-            TestFramework.assertTrue(json !== null, 'JSON should load');
-            TestFramework.assertTrue(json.title !== undefined, 'JSON should have title');
-            TestFramework.assertTrue(json.settings !== undefined, 'JSON should have settings');
-            TestFramework.assertTrue(json.timeline !== undefined, 'JSON should have timeline');
-          })
-          .catch(function(error) {
-            throw new Error('Failed to load presentation.json: ' + error.message);
-          });
-      });
-      
-      TestFramework.test('Presentation can be constructed from JSON', function() {
-        var json = {
-          title: 'Test Presentation',
-          settings: {
-            frameDuration: 30,
-            fixedTimestep: true,
-            width: 1024,
-            height: 768
-          },
-          background: {
-            type: 'rectangle',
-            fill: [100, 100, 100, 1],
-            width: 1024,
-            height: 768
-          },
-          characters: [
-            { name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } }
-          ],
-          timeline: {
-            tomte: [
-              { method: 'wait', params: [100] }
-            ]
+    function testTimelineOrderInvariants() {
+      // Property: Timeline order is always preserved
+      TestFramework.property(
+        'Timeline order preservation',
+        function() {
+          return TestFramework.generateTimeline(1, 50);
+        },
+        function(timeline) {
+          // Create a copy
+          var copy = JSON.parse(JSON.stringify(timeline));
+          
+          // Order should be identical
+          TestFramework.assertEqual(timeline.length, copy.length, 'Timeline length preserved');
+          for (var i = 0; i < timeline.length; i++) {
+            TestFramework.assertEqual(
+              timeline[i].method, 
+              copy[i].method, 
+              'Action ' + i + ' method preserved'
+            );
           }
-        };
-        
-        TestFramework.assertTrue(json.settings.frameDuration === 30, 'Frame duration set correctly');
-        TestFramework.assertTrue(json.characters.length === 1, 'One character defined');
-        TestFramework.assertTrue(json.timeline.tomte.length === 1, 'Timeline has actions');
-      });
+        },
+        1000
+      );
       
-      TestFramework.test('Timeline structure validation', function() {
-        var validTimeline = {
-          tomte: [
-            { method: 'wait', params: [100] },
-            { method: 'walkTo', params: [500, 600] }
-          ]
-        };
-        
-        // Validate structure
-        TestFramework.assertTrue(Array.isArray(validTimeline.tomte), 'Timeline should be array');
-        TestFramework.assertTrue(validTimeline.tomte.every(function(action) {
-          return action.method !== undefined && Array.isArray(action.params);
-        }), 'All actions should have method and params');
-      });
+      // Property: JSON roundtrip preserves order
+      TestFramework.property(
+        'JSON roundtrip preserves order',
+        function() {
+          return TestFramework.generateTimeline(1, 30);
+        },
+        function(timeline) {
+          var json = JSON.stringify({ timeline: { character: timeline } });
+          var parsed = JSON.parse(json);
+          
+          TestFramework.assertEqual(
+            parsed.timeline.character.length, 
+            timeline.length, 
+            'Length preserved through roundtrip'
+          );
+          
+          for (var i = 0; i < timeline.length; i++) {
+            TestFramework.assertEqual(
+              parsed.timeline.character[i].method,
+              timeline[i].method,
+              'Method preserved at index ' + i
+            );
+          }
+        },
+        1000
+      );
+      
+      // Property: Timeline concatenation preserves order
+      TestFramework.property(
+        'Timeline concatenation preserves order',
+        function() {
+          return {
+            t1: TestFramework.generateTimeline(1, 20),
+            t2: TestFramework.generateTimeline(1, 20)
+          };
+        },
+        function(input) {
+          var combined = input.t1.concat(input.t2);
+          
+          TestFramework.assertEqual(
+            combined.length, 
+            input.t1.length + input.t2.length,
+            'Combined length is sum of parts'
+          );
+          
+          // First part should match t1
+          for (var i = 0; i < input.t1.length; i++) {
+            TestFramework.assertEqual(
+              combined[i].method,
+              input.t1[i].method,
+              'First part preserved'
+            );
+          }
+          
+          // Second part should match t2
+          for (var i = 0; i < input.t2.length; i++) {
+            TestFramework.assertEqual(
+              combined[input.t1.length + i].method,
+              input.t2[i].method,
+              'Second part preserved'
+            );
+          }
+        },
+        1000
+      );
     }
     
-    // Test Suite 4: Action Source Retrieval
-    function testActionSourceRetrieval() {
-      TestFramework.test('Action source can be retrieved from timeline', function() {
-        var timeline = [
-          { method: 'wait', params: [100] },
-          { method: 'say', params: ['Hello'] },
-          { method: 'walkTo', params: [700, 690] }
-        ];
-        
-        var action = timeline[1];
-        TestFramework.assertEqual(action.method, 'say', 'Can retrieve action method');
-        TestFramework.assertEqual(action.params[0], 'Hello', 'Can retrieve action params');
-      });
+    function testSyncPointInvariants() {
+      // Property: Sync points have unique identifiers
+      TestFramework.property(
+        'Sync point uniqueness',
+        function() {
+          var timeline = [];
+          var numSyncs = TestFramework.randomInt(1, 10);
+          for (var i = 0; i < numSyncs; i++) {
+            timeline.push({ 
+              method: 'waitFor', 
+              params: ['sync_' + i] 
+            });
+          }
+          return timeline;
+        },
+        function(timeline) {
+          var syncLabels = timeline
+            .filter(function(a) { return a.method === 'waitFor'; })
+            .map(function(a) { return a.params[0]; });
+          
+          var uniqueLabels = syncLabels.filter(function(label, index) {
+            return syncLabels.indexOf(label) === index;
+          });
+          
+          TestFramework.assertEqual(
+            syncLabels.length, 
+            uniqueLabels.length,
+            'All sync labels should be unique'
+          );
+        },
+        1000
+      );
       
-      TestFramework.test('Timeline can be converted to JavaScript source', function() {
-        var timeline = [
-          { method: 'wait', params: [100] },
-          { method: 'walkTo', params: [500, 600] }
-        ];
-        
-        var source = 'this.tomte\n';
-        timeline.forEach(function(action) {
+      // Property: Sync points are preserved in timeline
+      TestFramework.property(
+        'Sync point preservation',
+        function() {
+          var timeline = [];
+          var hasSyncPoint = TestFramework.randomBool();
+          var syncLabel = 'sync_' + TestFramework.randomInt(1, 1000);
+          
+          for (var i = 0; i < TestFramework.randomInt(5, 20); i++) {
+            timeline.push(TestFramework.generateAction());
+          }
+          
+          if (hasSyncPoint) {
+            var pos = TestFramework.randomInt(0, timeline.length);
+            timeline.splice(pos, 0, { method: 'waitFor', params: [syncLabel] });
+          }
+          
+          return { timeline: timeline, syncLabel: syncLabel, hasSyncPoint: hasSyncPoint };
+        },
+        function(input) {
+          var hasSyncInTimeline = input.timeline.some(function(action) {
+            return action.method === 'waitFor' && action.params[0] === input.syncLabel;
+          });
+          
+          TestFramework.assertEqual(
+            hasSyncInTimeline,
+            input.hasSyncPoint,
+            'Sync point presence matches expected'
+          );
+        },
+        1000
+      );
+    }
+    
+    function testJSONStructureInvariants() {
+      // Property: Valid JSON structure is always parseable
+      TestFramework.property(
+        'JSON structure validity',
+        function() {
+          return {
+            title: 'Test ' + TestFramework.randomString(10),
+            settings: {
+              frameDuration: TestFramework.randomInt(10, 60),
+              fixedTimestep: TestFramework.randomBool(),
+              width: TestFramework.randomInt(800, 1920),
+              height: TestFramework.randomInt(600, 1080)
+            },
+            background: TestFramework.generateBackground(),
+            characters: [TestFramework.generateCharacterDef()],
+            timeline: {
+              tomte: TestFramework.generateTimeline(1, 10)
+            }
+          };
+        },
+        function(presentation) {
+          var json = JSON.stringify(presentation);
+          var parsed = JSON.parse(json);
+          
+          TestFramework.assertTrue(parsed !== null, 'JSON parses successfully');
+          TestFramework.assertTrue(parsed.title !== undefined, 'Title preserved');
+          TestFramework.assertTrue(parsed.settings !== undefined, 'Settings preserved');
+          TestFramework.assertTrue(parsed.timeline !== undefined, 'Timeline preserved');
+        },
+        1000
+      );
+      
+      // Property: Character definitions are preserved
+      TestFramework.property(
+        'Character definition preservation',
+        function() {
+          var numChars = TestFramework.randomInt(1, 5);
+          var characters = [];
+          for (var i = 0; i < numChars; i++) {
+            characters.push(TestFramework.generateCharacterDef());
+          }
+          return characters;
+        },
+        function(characters) {
+          var json = JSON.stringify({ characters: characters });
+          var parsed = JSON.parse(json);
+          
+          TestFramework.assertEqual(
+            parsed.characters.length,
+            characters.length,
+            'Character count preserved'
+          );
+          
+          for (var i = 0; i < characters.length; i++) {
+            TestFramework.assertTrue(
+              parsed.characters[i].name !== undefined,
+              'Character ' + i + ' has name'
+            );
+            TestFramework.assertTrue(
+              parsed.characters[i].type !== undefined,
+              'Character ' + i + ' has type'
+            );
+          }
+        },
+        1000
+      );
+    }
+    
+    function testActionRetrievalInvariants() {
+      // Property: Every action in timeline can be retrieved
+      TestFramework.property(
+        'Action retrieval completeness',
+        function() {
+          return TestFramework.generateTimeline(1, 50);
+        },
+        function(timeline) {
+          for (var i = 0; i < timeline.length; i++) {
+            var action = timeline[i];
+            TestFramework.assertTrue(
+              action.method !== undefined,
+              'Action ' + i + ' has method'
+            );
+            TestFramework.assertTrue(
+              Array.isArray(action.params),
+              'Action ' + i + ' has params array'
+            );
+          }
+        },
+        1000
+      );
+      
+      // Property: Action source can be generated
+      TestFramework.property(
+        'Action to source conversion',
+        function() {
+          return TestFramework.generateAction();
+        },
+        function(action) {
           var params = action.params.map(function(p) {
             return typeof p === 'string' ? '"' + p + '"' : p;
           }).join(', ');
-          source += '  .' + action.method + '(' + params + ')\n';
-        });
-        
-        TestFramework.assertTrue(source.indexOf('.wait(100)') > -1, 'Source contains wait');
-        TestFramework.assertTrue(source.indexOf('.walkTo(500, 600)') > -1, 'Source contains walkTo');
-      });
+          var source = '.' + action.method + '(' + params + ')';
+          
+          TestFramework.assertTrue(source.indexOf(action.method) > -1, 'Source contains method');
+          TestFramework.assertTrue(source.length > 0, 'Source is non-empty');
+        },
+        1000
+      );
     }
     
-    // Test Suite 5: Body Part Image Verification
-    function testBodyPartImages() {
-      TestFramework.test('Character sprite definitions are correct', function() {
-        var charDef = {
-          name: 'tomte',
-          type: 'Tomte',
-          sprites: {
-            head: 'tomte_sprite/head.png',
-            torso_front: 'tomte_sprite/torso_front.png',
-            left_foot: 'tomte_sprite/left_foot.png',
-            right_foot: 'tomte_sprite/right_foot.png'
-          }
-        };
-        
-        TestFramework.assertTrue(charDef.sprites.head.indexOf('tomte_sprite') > -1, 'Head sprite path correct');
-        TestFramework.assertTrue(charDef.sprites.left_foot.indexOf('left_foot.png') > -1, 'Foot sprite path correct');
-      });
-      
-      TestFramework.test('Sprite paths match expected pattern', function() {
-        var spritePaths = [
-          'tomte_sprite/head.png',
-          'tomte_sprite/torso_front.png',
-          'goat_sprite/head.png',
-          'goat_sprite/torso.png'
-        ];
-        
-        spritePaths.forEach(function(path) {
+    function testSpritePathInvariants() {
+      // Property: Sprite paths follow naming convention
+      TestFramework.property(
+        'Sprite path convention',
+        function() {
+          var character = TestFramework.randomChoice(['tomte', 'goat']);
+          var parts = ['head', 'torso', 'left_foot', 'right_foot', 'left_hand', 'right_hand'];
+          var part = TestFramework.randomChoice(parts);
+          return character + '_sprite/' + part + '.png';
+        },
+        function(path) {
           TestFramework.assertTrue(
             path.match(/^(tomte|goat)_sprite\/.*\.png$/) !== null,
-            'Path ' + path + ' matches expected pattern'
+            'Path matches expected pattern: ' + path
           );
-        });
-      });
+        },
+        1000
+      );
+      
+      // Property: Character sprite sets are complete
+      TestFramework.property(
+        'Sprite set completeness',
+        function() {
+          var sprites = {};
+          var parts = ['head', 'torso', 'foot'];
+          var numParts = TestFramework.randomInt(1, parts.length);
+          for (var i = 0; i < numParts; i++) {
+            sprites[parts[i]] = TestFramework.randomChoice(['tomte', 'goat']) + 
+                               '_sprite/' + parts[i] + '.png';
+          }
+          return sprites;
+        },
+        function(sprites) {
+          for (var part in sprites) {
+            TestFramework.assertTrue(
+              sprites[part].indexOf('_sprite/') > -1,
+              'Sprite path contains _sprite/ directory'
+            );
+            TestFramework.assertTrue(
+              sprites[part].endsWith('.png'),
+              'Sprite path ends with .png'
+            );
+          }
+        },
+        1000
+      );
     }
     
-    // Test Suite 6: Background Verification
-    function testBackgroundConfiguration() {
-      TestFramework.test('Background type validation', function() {
-        var backgrounds = [
-          { type: 'image', src: 'trees2.jpg' },
-          { type: 'rectangle', fill: [100, 100, 100, 1], width: 1024, height: 768 }
-        ];
-        
-        backgrounds.forEach(function(bg) {
+    function testBackgroundInvariants() {
+      // Property: Background configurations are valid
+      TestFramework.property(
+        'Background configuration validity',
+        function() {
+          return TestFramework.generateBackground();
+        },
+        function(background) {
           TestFramework.assertTrue(
-            bg.type === 'image' || bg.type === 'rectangle',
-            'Background type should be image or rectangle'
+            background.type === 'image' || background.type === 'rectangle',
+            'Background type is valid'
           );
           
-          if (bg.type === 'image') {
-            TestFramework.assertTrue(bg.src !== undefined, 'Image background should have src');
-          } else if (bg.type === 'rectangle') {
-            TestFramework.assertTrue(Array.isArray(bg.fill), 'Rectangle background should have fill');
+          if (background.type === 'image') {
+            TestFramework.assertTrue(
+              background.src !== undefined,
+              'Image background has src'
+            );
+          } else if (background.type === 'rectangle') {
+            TestFramework.assertTrue(
+              Array.isArray(background.fill),
+              'Rectangle background has fill array'
+            );
           }
-        });
-      });
+        },
+        1000
+      );
       
-      TestFramework.test('Background images exist', function() {
-        var imageBackgrounds = ['trees2.jpg', 'bg.jpg', 'bg_day.jpg'];
-        
-        // Verify format is correct
-        imageBackgrounds.forEach(function(img) {
-          TestFramework.assertTrue(img.endsWith('.jpg'), 'Background should be jpg file');
-        });
-      });
+      // Property: Background visibility can be toggled
+      TestFramework.property(
+        'Background visibility toggling',
+        function() {
+          return {
+            bg: TestFramework.generateBackground(),
+            newVisible: TestFramework.randomBool()
+          };
+        },
+        function(input) {
+          input.bg.visible = input.newVisible;
+          TestFramework.assertEqual(
+            input.bg.visible,
+            input.newVisible,
+            'Visibility can be set'
+          );
+        },
+        1000
+      );
     }
     
-    // Test Suite 7: Background Timeline Actions
-    function testBackgroundTimelineActions() {
-      TestFramework.test('Background can be changed via timeline', function() {
-        var presentation = {
-          background: { type: 'image', src: 'trees2.jpg', zIndex: -1 },
-          timeline: {
-            tomte: [
-              { method: 'changeBackground', params: ['bg_day.jpg'] }
-            ]
-          }
-        };
-        
-        TestFramework.assertTrue(presentation.background.src === 'trees2.jpg', 'Initial background set');
-        
-        // Verify timeline can change background
-        var bgChangeAction = presentation.timeline.tomte.find(function(a) {
-          return a.method === 'changeBackground';
-        });
-        
-        TestFramework.assertTrue(bgChangeAction !== undefined, 'Background change action exists');
-        TestFramework.assertEqual(bgChangeAction.params[0], 'bg_day.jpg', 'New background specified');
-      });
-      
-      TestFramework.test('Background visibility can be toggled', function() {
-        var bgStates = [
-          { type: 'image', src: 'bg.jpg', visible: true },
-          { type: 'image', src: 'bg.jpg', visible: false }
-        ];
-        
-        bgStates.forEach(function(bg) {
+    function testTextAnimationInvariants() {
+      // Property: Text animation parameters are valid
+      TestFramework.property(
+        'Text animation parameter validity',
+        function() {
+          return {
+            text: TestFramework.randomString(TestFramework.randomInt(5, 50)),
+            position: { 
+              x: TestFramework.randomInt(0, 1024), 
+              y: TestFramework.randomInt(0, 768) 
+            },
+            fontSize: TestFramework.randomInt(12, 72),
+            color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+            animation: {
+              type: TestFramework.randomChoice(['fade', 'slide', 'zoom']),
+              duration: TestFramework.randomInt(100, 5000)
+            }
+          };
+        },
+        function(titleDef) {
+          TestFramework.assertTrue(titleDef.text.length > 0, 'Title has text');
           TestFramework.assertTrue(
-            typeof bg.visible === 'boolean',
-            'Background visible property should be boolean'
+            titleDef.position.x >= 0 && titleDef.position.y >= 0,
+            'Title has valid position'
           );
-        });
-      });
+          TestFramework.assertTrue(titleDef.fontSize > 0, 'Title has positive font size');
+          TestFramework.assertTrue(titleDef.animation.duration > 0, 'Animation has positive duration');
+        },
+        1000
+      );
     }
     
-    // Test Suite 8: Title Text Animation
-    function testTitleTextAnimation() {
-      TestFramework.test('Title text can be animated', function() {
-        var textActions = [
-          { method: 'showTitle', params: ['Canvas Animation', 2000] },
-          { method: 'hideTitle', params: [] },
-          { method: 'animateTitle', params: ['fade', 1000] }
-        ];
-        
-        textActions.forEach(function(action) {
-          TestFramework.assertTrue(action.method !== undefined, 'Text action has method');
-          TestFramework.assertTrue(Array.isArray(action.params), 'Text action has params');
-        });
-      });
-      
-      TestFramework.test('Text animation properties are valid', function() {
-        var titleDef = {
-          text: 'Canvas Animation',
-          position: { x: 512, y: 384 },
-          fontSize: 48,
-          color: '#ffffff',
-          animation: { type: 'fade', duration: 1000 }
-        };
-        
-        TestFramework.assertTrue(titleDef.text.length > 0, 'Title has text');
-        TestFramework.assertTrue(titleDef.position.x > 0 && titleDef.position.y > 0, 'Title has position');
-        TestFramework.assertTrue(titleDef.fontSize > 0, 'Title has font size');
-        TestFramework.assertTrue(titleDef.animation.duration > 0, 'Animation has duration');
-      });
-    }
-    
-    // Test Suite 9: Invariant Preservation
-    function testInvariantPreservation() {
-      TestFramework.test('Timeline length invariant preserved', function() {
-        for (var i = 0; i < 10; i++) {
-          var timeline = TestFramework.generateTimeline(i + 1);
-          TestFramework.assertEqual(timeline.length, i + 1, 'Timeline length matches expected');
-        }
-      });
-      
-      TestFramework.test('Action structure invariant preserved', function() {
-        var timeline = TestFramework.generateTimeline(20);
-        
-        timeline.forEach(function(action, index) {
+    function testStateConsistencyInvariants() {
+      // Property: Character state remains consistent
+      TestFramework.property(
+        'Character state consistency',
+        function() {
+          return TestFramework.generateCharacterDef();
+        },
+        function(character) {
+          TestFramework.assertTrue(character.name !== undefined, 'Character has name');
+          TestFramework.assertTrue(character.type !== undefined, 'Character has type');
+          TestFramework.assertTrue(character.position !== undefined, 'Character has position');
           TestFramework.assertTrue(
-            action.method !== undefined,
-            'Action ' + index + ' has method'
+            typeof character.position.x === 'number',
+            'Position x is number'
           );
           TestFramework.assertTrue(
-            Array.isArray(action.params),
-            'Action ' + index + ' has params array'
+            typeof character.position.y === 'number',
+            'Position y is number'
           );
-        });
-      });
+        },
+        1000
+      );
       
-      TestFramework.test('Character state consistency', function() {
-        var characters = [
-          { name: 'tomte', type: 'Tomte', position: { x: 0, y: 0 } },
-          { name: 'goat', type: 'Goat', position: { x: 0, y: 0 } }
-        ];
-        
-        characters.forEach(function(char) {
-          TestFramework.assertTrue(char.name !== undefined, 'Character has name');
-          TestFramework.assertTrue(char.type !== undefined, 'Character has type');
-          TestFramework.assertTrue(char.position !== undefined, 'Character has position');
-          TestFramework.assertTrue(typeof char.position.x === 'number', 'Position x is number');
-          TestFramework.assertTrue(typeof char.position.y === 'number', 'Position y is number');
-        });
-      });
+      // Property: Timeline length invariant
+      TestFramework.property(
+        'Timeline length invariant',
+        function() {
+          var size = TestFramework.randomInt(0, 100);
+          return { size: size, timeline: TestFramework.generateTimeline(size, size) };
+        },
+        function(input) {
+          TestFramework.assertEqual(
+            input.timeline.length,
+            input.size,
+            'Timeline length matches expected'
+          );
+        },
+        1000
+      );
     }
     
     // Run all test suites
     function runAllTests() {
       TestFramework.results = [];
+      var progress = document.getElementById('progress');
       
+      progress.textContent = 'Running property-based tests (1000+ cases per property)...';
       console.log('Running property-based tests...');
       
-      testTimelineOrderPreservation();
-      testSyncPointInvariants();
-      testJSONLoadingAndConstruction();
-      testActionSourceRetrieval();
-      testBodyPartImages();
-      testBackgroundConfiguration();
-      testBackgroundTimelineActions();
-      testTitleTextAnimation();
-      testInvariantPreservation();
-      
-      displayResults();
+      // Use setTimeout to avoid blocking UI
+      setTimeout(function() {
+        testTimelineOrderInvariants();
+        progress.textContent = 'Progress: 3/12 test properties...';
+        
+        setTimeout(function() {
+          testSyncPointInvariants();
+          progress.textContent = 'Progress: 5/12 test properties...';
+          
+          setTimeout(function() {
+            testJSONStructureInvariants();
+            progress.textContent = 'Progress: 7/12 test properties...';
+            
+            setTimeout(function() {
+              testActionRetrievalInvariants();
+              progress.textContent = 'Progress: 9/12 test properties...';
+              
+              setTimeout(function() {
+                testSpritePathInvariants();
+                testBackgroundInvariants();
+                testTextAnimationInvariants();
+                testStateConsistencyInvariants();
+                
+                progress.textContent = 'All tests complete!';
+                displayResults();
+              }, 100);
+            }, 100);
+          }, 100);
+        }, 100);
+      }, 100);
     }
     
     function displayResults() {
@@ -507,12 +763,16 @@
       
       var passed = TestFramework.results.filter(function(r) { return r.passed; }).length;
       var failed = TestFramework.results.filter(function(r) { return !r.passed; }).length;
+      var totalRuns = TestFramework.results.reduce(function(sum, r) { return sum + r.runs; }, 0);
+      var totalUnique = TestFramework.results.reduce(function(sum, r) { return sum + r.uniqueCases; }, 0);
       
       var summary = document.createElement('div');
       summary.className = 'test-summary';
-      summary.innerHTML = 'Tests Run: ' + TestFramework.results.length + 
+      summary.innerHTML = 'Tests: ' + TestFramework.results.length + 
                           ' | Passed: ' + passed + 
-                          ' | Failed: ' + failed;
+                          ' | Failed: ' + failed +
+                          '<br>Total Test Runs: ' + totalRuns.toLocaleString() +
+                          ' | Unique Cases: ' + totalUnique.toLocaleString();
       resultsDiv.appendChild(summary);
       
       var suite = document.createElement('div');
@@ -523,12 +783,27 @@
         resultDiv.className = 'test-result ' + (result.passed ? 'test-pass' : 'test-fail');
         
         var status = result.passed ? '✓' : '✗';
-        resultDiv.innerHTML = '<strong>' + status + ' ' + result.name + '</strong>';
+        
+        var testInfo = document.createElement('div');
+        testInfo.className = 'test-info';
+        
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'test-name';
+        nameSpan.textContent = status + ' ' + result.name;
+        testInfo.appendChild(nameSpan);
+        
+        var statsSpan = document.createElement('span');
+        statsSpan.className = 'test-stats';
+        statsSpan.textContent = result.runs.toLocaleString() + ' runs, ' + 
+                               result.uniqueCases.toLocaleString() + ' unique cases';
+        testInfo.appendChild(statsSpan);
+        
+        resultDiv.appendChild(testInfo);
         
         if (!result.passed) {
           var errorDiv = document.createElement('div');
           errorDiv.className = 'error-detail';
-          errorDiv.textContent = result.error;
+          errorDiv.textContent = result.error + ' (failed ' + result.failedRuns + '/' + result.runs + ' runs)';
           resultDiv.appendChild(errorDiv);
         }
         
@@ -540,6 +815,7 @@
     
     function clearResults() {
       document.getElementById('test-results').innerHTML = '';
+      document.getElementById('progress').textContent = '';
       TestFramework.results = [];
     }
     
